@@ -3,7 +3,7 @@ import sys
 import os
 import random
 
-# Importações dos outros módulos do nosso projeto multi-ficheiro
+# Importações dos outros módulos
 from config import *
 from utils import drawQuad, drawStripedSky
 from track import Track
@@ -17,30 +17,24 @@ class GameWindow:
         # Inicialização da janela principal do Pygame
         self.windowSurface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("TrackDay - Arcade Bots com Efeito Estilingue")
-        self.clock = pygame.time.Clock() # Utilizado para trancar os FPS
+        self.clock = pygame.time.Clock()
         
-        # Configuração das fontes para o HUD (Velocidade, Voltas, etc.)
+        # Configuração das fontes para o HUD
         pygame.font.init()
         self.hudFont = pygame.font.SysFont('Arial', 30, bold=True)
         self.lapFont = pygame.font.SysFont('Arial', 40, bold=True)
         
         # Configurações do motor de renderização pseudo-3D
-        self.roadWidth = 2000     # Largura virtual da pista
-        self.segmentLength = 200  # Comprimento de cada segmento da pista
-        self.cameraDepth = 0.84   # Profundidade da câmara (Aprofunda o FoV/Campo de Visão)
-        self.showSegments = 300   # Quantos segmentos desenhar à frente do jogador (Draw Distance)
+        self.roadWidth = 2000
+        self.segmentLength = 200
+        self.cameraDepth = 0.84
+        self.showSegments = 300
         
-        # Instancia a pista num objeto separado (lógica importada de track.py)
         self.track = Track(self.segmentLength)
-
-        # Carrega todas as imagens e sprites necessários para a memória
         self._loadAssets()
 
     def _loadAssets(self):
-        """
-        Carrega e prepara os recursos visuais (fundo e sprites dos carros).
-        """
-        # --- CARREGAR FUNDO (CÉU E MONTANHAS) ---
+        # --- CARREGAR FUNDO ---
         try:
             bgOriginal = pygame.image.load("sprites/bg/L1.png").convert_alpha()
             escala = 6
@@ -48,28 +42,24 @@ class GameWindow:
             novoH = bgOriginal.get_height() * escala
             self.backgroundImage = pygame.transform.scale(bgOriginal, (novoW, novoH))
         except FileNotFoundError:
-            # Fallback caso a imagem não exista
             self.backgroundImage = pygame.Surface((WINDOW_WIDTH, 128), pygame.SRCALPHA)
 
         self.bgWidth = self.backgroundImage.get_width()
         bgHeight = self.backgroundImage.get_height()
 
-        # Criamos uma superfície tripla para o fundo para fazer o efeito de "parallax" (scroll infinito)
         self.backgroundSurface = pygame.Surface((self.bgWidth * 3, bgHeight), pygame.SRCALPHA)
         self.backgroundSurface.blit(self.backgroundImage, (0, 0))
         self.backgroundSurface.blit(self.backgroundImage, (self.bgWidth, 0))
         self.backgroundSurface.blit(self.backgroundImage, (self.bgWidth * 2, 0))
         self.backgroundRect = self.backgroundSurface.get_rect(topleft=(-self.bgWidth, 0))
-        self.bgOffsetX = 0.0 # Controla o deslocamento horizontal do fundo
+        self.bgOffsetX = 0.0
 
-        # --- CARREGAR SPRITES DO JOGADOR E BOTS ---
+        # --- CARREGAR SPRITES DOS CARROS ---
         self.rawCarSprites = {}
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
         basePath = os.path.join(diretorioAtual, "sprites", "cars", "280GTO")
 
         try:
-            # Carrega os sprites base para as 5 direções (S=Straight, L=Left, R=Right)
-            # Cada direção tem 2 frames para a animação da roda
             self.rawCarSprites = {
                 'S':  [pygame.image.load(os.path.join(basePath, 'S.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'S2.png')).convert_alpha()],
                 'L':  [pygame.image.load(os.path.join(basePath, 'L.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'L2.png')).convert_alpha()],
@@ -78,12 +68,10 @@ class GameWindow:
                 'SR': [pygame.image.load(os.path.join(basePath, 'SR.png')).convert_alpha(),  pygame.image.load(os.path.join(basePath, 'SR2.png')).convert_alpha()]
             }
         except FileNotFoundError:
-            # Fallback (retângulo vermelho) se faltarem ficheiros
             surface = pygame.Surface((150, 80))
             surface.fill((255, 0, 0))
             self.rawCarSprites = {k: [surface, surface] for k in ['S', 'L', 'SL', 'R', 'SR']}
 
-        # Prepara os sprites redimensionados específicos para o jogador (escala fixa)
         carTargetWidth = 300
         imagemReta = self.rawCarSprites['S'][0]
         fatorEscala = carTargetWidth / imagemReta.get_width()
@@ -96,290 +84,301 @@ class GameWindow:
                 nH = int(img.get_height() * fatorEscala)
                 self.carSprites[state].append(pygame.transform.scale(img, (nW, nH)))
 
+    def draw_hud(self, text, font, color, x, y, align="left"):
+        """Função auxiliar para desenhar o texto com o fundo preto padronizado"""
+        surface = font.render(text, True, color)
+        rect = pygame.Rect(0, y - 5, surface.get_width() + 20, surface.get_height() + 10)
+        
+        if align == "left":
+            rect.x = x - 10
+            text_x = x
+        elif align == "right":
+            rect.right = x + 10
+            text_x = x - surface.get_width()
+        elif align == "center":
+            rect.centerx = x
+            text_x = x - surface.get_width() // 2
+            
+        pygame.draw.rect(self.windowSurface, (0, 0, 0), rect)
+        self.windowSurface.blit(surface, (text_x, y))
+
     def run(self):
-        """
-        O Loop principal do jogo. Contém a física, a IA e a renderização frame a frame.
-        """
-        # Constrói o traçado matemático da pista
         self.track.buildTrack()
         lines = self.track.lines
         totalSegments = len(lines)
-        trackLength = totalSegments * self.segmentLength # Comprimento total da volta
+        trackLength = totalSegments * self.segmentLength
 
-        # Variáveis de estado do Jogador
-        absolutePos = 0.0     # Posição global no circuito em Z
-        maxLaps = 3           # Número de voltas da corrida
-        playerX = 0.0         # Posição horizontal do jogador (-1 a 1 é a pista)
-        playerY = 1250        # Altura da câmara
-        playerPitchBase = 150 # Inclinação base da câmara
-        smoothPitch = 0.0     # Usado para suavizar o movimento de subida/descida (colinas)
+        # Variáveis de estado do Jogador e Corrida
+        absolutePos = 0.0
+        maxLaps = 5  # Alterado para 5 voltas
+        playerX = 0.0
+        playerY = 1250
+        playerPitchBase = 150
+        smoothPitch = 0.0
         
-        # Variáveis de Velocidade
         speed = 0.0
         basePlayerMaxSpeed = 260 
         maxSpeed = basePlayerMaxSpeed
-        draftBonus = 0.0      # Bónus ganho por ir no vácuo de outro carro
+        draftBonus = 0.0
         
-        # Timers para animação
         animTimer = 0
         turnTimer = 0
 
-        # --- INICIALIZAÇÃO DOS OPONENTES (BOTS) ---
+        # Máquina de Estado da Corrida
+        self.raceState = 'COUNTDOWN' # Pode ser 'COUNTDOWN', 'RACING', 'FINISHED'
+        self.countdownStartTick = pygame.time.get_ticks()
+        self.finishStartTick = 0
+        countdown_text = None
+
+        # --- INICIALIZAÇÃO DOS OPONENTES ---
         self.opponents = []
         for i in range(9):
-            baseSpeed = 240 + (i * 3) # Cada bot tem uma velocidade ligeiramente diferente
+            baseSpeed = 240 + (i * 3)
+            start_z = (i + 1) * 1500.0
             self.opponents.append({
                 'id': i, 
-                'z': (i + 1) * 1500.0,            # Posição inicial no circuito
-                'x': (i % 3) * 1.2 - 1.2,         # Espalhados por 3 faixas (-1.2, 0.0, 1.2)
-                'targetX': (i % 3) * 1.2 - 1.2,   # Faixa para onde o bot quer ir
+                'z': start_z,
+                'totalZ': start_z, # Para calcular posições corretamente
+                'x': (i % 3) * 1.2 - 1.2,
+                'targetX': (i % 3) * 1.2 - 1.2,
                 'speed': 0.0, 
                 'baseMaxSpeed': baseSpeed, 
                 'maxSpeed': baseSpeed,
-                'decisionTimer': random.randint(0, 100), # Timer para mudar de faixa aleatoriamente
-                'lateralDelta': 0.0               # Indica a força da curva visual que o bot está a fazer
+                'decisionTimer': random.randint(0, 100),
+                'lateralDelta': 0.0
             })
 
         # ==========================================
         # GAME LOOP PRINCIPAL
         # ==========================================
         while True:
-            # 1. PROCESSAR EVENTOS (Fechar janela)
+            currentTick = pygame.time.get_ticks()
+            
             for event in pygame.event.get([pygame.QUIT]):
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
 
             keys = pygame.key.get_pressed()
-
+            
+            # Variáveis de comando que podemos manipular na Largada e no Autopilot
+            cmd_up = keys[pygame.K_UP]
+            cmd_down = keys[pygame.K_DOWN]
+            cmd_left = keys[pygame.K_LEFT]
+            cmd_right = keys[pygame.K_RIGHT]
+            
             # Descobre em que parte do circuito o jogador está
             pos = absolutePos % trackLength 
             currentLap = int(absolutePos // trackLength) + 1
 
             startPos = int(pos // self.segmentLength)
             startSegment = lines[startPos % totalSegments]
-            rawCurve = startSegment.curve # Curvatura real do segmento atual
+            rawCurve = startSegment.curve
             absCurve = abs(rawCurve)
             
+            # --- GESTÃO DE ESTADOS (LARGADA E FINAL) ---
+            if self.raceState == 'COUNTDOWN':
+                # Bloqueia os controles do jogador
+                cmd_up = cmd_down = cmd_left = cmd_right = False
+                
+                elapsed = currentTick - self.countdownStartTick
+                if elapsed < 1000: countdown_text = "3"
+                elif elapsed < 2000: countdown_text = "2"
+                elif elapsed < 3000: countdown_text = "1"
+                elif elapsed < 4000: countdown_text = "GO!"
+                else: 
+                    self.raceState = 'RACING'
+                    countdown_text = None
+                    
+            elif self.raceState == 'RACING':
+                if currentLap > maxLaps:
+                    self.raceState = 'FINISHED'
+                    self.finishStartTick = currentTick
+                    
+            elif self.raceState == 'FINISHED':
+                # Inteligência Artificial pilota o carro do jogador
+                cmd_up = speed < 220
+                cmd_down = speed > 220
+                cmd_left = playerX > 0.1
+                cmd_right = playerX < -0.1
+                
+                # Desliga após 5 segundos
+                if currentTick - self.finishStartTick > 5000:
+                    pygame.quit()
+                    sys.exit()
+
             # --- SISTEMA DE VÁCUO (SLIPSTREAM) ---
-            # Se formos atrás de um carro, ganhamos velocidade extra
             isDrafting = False
-            playerVisualZ = 780 # Onde o carro do jogador parece estar no ecrã
+            playerVisualZ = 780
             playerVirtualZ = pos + playerVisualZ 
 
-            # Só funciona em retas ou curvas muito suaves, e se já estivermos rápidos
             if absCurve <= 2.0 and speed >= 240:
                 for opp in self.opponents:
                     dz = opp['z'] - playerVirtualZ
-                    if dz < 0: dz += trackLength # Corrige o cálculo perto da meta
-                    # Se o bot estiver perto à nossa frente e na mesma faixa
+                    if dz < 0: dz += trackLength 
                     if 50 < dz < 6000 and abs(opp['x'] - playerX) < 0.3:
                         isDrafting = True
                         break
             
-            # Aplica o bónus gradualmente (efeito estilingue)
-            if isDrafting:
-                draftBonus = min(10.0, draftBonus + 0.15)
-            else:
-                draftBonus = max(0.0, draftBonus - 0.10)
-                    
+            if isDrafting: draftBonus = min(10.0, draftBonus + 0.15)
+            else: draftBonus = max(0.0, draftBonus - 0.10)
             maxSpeed = basePlayerMaxSpeed + draftBonus
 
             # --- FÍSICA: FORÇA CENTRÍFUGA ---
-            # Empurra o carro para fora nas curvas, dependendo da velocidade
             trackDriftForce = (absCurve ** 0.6) * 0.015
             currentCentrifugal = trackDriftForce * (speed / maxSpeed)
 
-            isOffroad = abs(playerX) > 2.3 # Mais que 2.3 = o carro está na relva
+            isOffroad = abs(playerX) > 2.3
             currentMaxSpeed = maxSpeed * 0.4 if isOffroad else maxSpeed
 
-            # --- CONTROLOS DO JOGADOR ---
-            if keys[pygame.K_UP]: speed += 3       # Acelerar
-            elif keys[pygame.K_DOWN]: speed -= 8   # Travar
+            # --- CONTROLOS (AFETADOS PELA IA NO FINISH) ---
+            if cmd_up: speed += 3
+            elif cmd_down: speed -= 8
             else:
-                if speed > 0: speed -= 2           # Atrito natural
+                if speed > 0: speed -= 2
                 elif speed < 0: speed += 2
 
-            steerState = 'S'      # Sprite base do carro
-            baseSteer = 0.045     # Força de viragem do comando
+            steerState = 'S'
+            baseSteer = 0.045
             steerCap = 0.09
             steerAmount = 0.0
             isTurning = False
 
-            # Lógica para virar à esquerda
-            if keys[pygame.K_LEFT] and speed > 0:
+            if cmd_left and speed > 0:
                 isTurning = True
-                if rawCurve < -1.0: # Ajudar a virar se a curva for para o mesmo lado
-                    steerAmount = min(max(baseSteer * 0.6, currentCentrifugal + 0.002), steerCap)
-                else: 
-                    steerAmount = baseSteer
-                    
+                if rawCurve < -1.0: steerAmount = min(max(baseSteer * 0.6, currentCentrifugal + 0.002), steerCap)
+                else: steerAmount = baseSteer
                 playerX -= steerAmount
                 turnTimer = max(0, turnTimer) + 1 
                 steerState = 'L' if turnTimer > 5 else 'SL'
                     
-            # Lógica para virar à direita
-            elif keys[pygame.K_RIGHT] and speed > 0:
+            elif cmd_right and speed > 0:
                 isTurning = True
-                if rawCurve > 1.0: 
-                    steerAmount = min(max(baseSteer * 0.6, currentCentrifugal + 0.002), steerCap)
-                else: 
-                    steerAmount = baseSteer
-                    
+                if rawCurve > 1.0: steerAmount = min(max(baseSteer * 0.6, currentCentrifugal + 0.002), steerCap)
+                else: steerAmount = baseSteer
                 playerX += steerAmount
                 turnTimer = min(0, turnTimer) - 1 
                 steerState = 'R' if turnTimer < -5 else 'SR'
             else:
-                turnTimer = 0 # Carro endireita-se
+                turnTimer = 0 
 
-            # Aplica a derrapagem (força centrífuga) na posição X do jogador
             trackDrift = currentCentrifugal if rawCurve > 0 else (-currentCentrifugal if rawCurve < 0 else 0.0)
             playerX -= trackDrift
 
-            # Punições de velocidade por erros
-            if isOffroad and speed > currentMaxSpeed: 
-                speed -= 6 # Desacelera muito na relva
+            if isOffroad and speed > currentMaxSpeed: speed -= 6 
             if isTurning and trackDriftForce > 0.015:
-                # Perde velocidade se curvar com demasiada força
                 targetSpeed = currentMaxSpeed - (trackDriftForce * 900)
                 if speed > targetSpeed: speed -= 5.0
 
-            # Impede o jogador de sair do limite do mundo
             playerX = max(-5.0, min(playerX, 5.0))
             
             # ==========================================
             # INTELIGÊNCIA ARTIFICIAL (BOTS)
             # ==========================================
             for opp in self.opponents:
-                # 1. Rubberbanding (Efeito elástico para manter os bots competitivos)
-                distFromPlayer = opp['z'] - pos
-                if distFromPlayer > trackLength / 2: distFromPlayer -= trackLength
-                elif distFromPlayer < -trackLength / 2: distFromPlayer += trackLength
-                
-                # Acelera bots que ficaram muito para trás, abranda os muito avançados
-                if distFromPlayer < -10000: opp['maxSpeed'] = opp['baseMaxSpeed'] + 6
-                elif distFromPlayer > 1200: opp['maxSpeed'] = opp['baseMaxSpeed'] - 3
-                else: opp['maxSpeed'] = opp['baseMaxSpeed']
-
-                # Lógica de aceleração básica do bot
-                if opp['speed'] < opp['maxSpeed']: opp['speed'] += 2.5
-                elif opp['speed'] > opp['maxSpeed']: opp['speed'] -= 1.0 
-                
-                # Curva atual onde o bot se encontra
-                oppSeg = lines[int(opp['z'] // self.segmentLength) % totalSegments]
-                oppCurve = oppSeg.curve
-                oppAbsCurve = abs(oppCurve)
-                
-                # 2. Tomada de Decisão (Mudar de faixa aleatoriamente nas retas)
-                opp['decisionTimer'] -= 1
-                if opp['decisionTimer'] <= 0:
-                    opp['decisionTimer'] = random.randint(60, 120)
-                    if oppAbsCurve < 0.5:
-                        opp['targetX'] = random.choice([-1.2, -0.6, 0.0, 0.6, 1.2])
-                
-                # 3. Radar Anticolisão: Bot contra Bot
-                for other in self.opponents:
-                    if other is opp: continue 
-                    distZ = other['z'] - opp['z']
-                    if distZ < 0: distZ += trackLength 
+                if self.raceState == 'COUNTDOWN':
+                    opp['speed'] = 0
+                    opp['lateralDelta'] = 0.0
+                else:
+                    distFromPlayer = opp['z'] - pos
+                    if distFromPlayer > trackLength / 2: distFromPlayer -= trackLength
+                    elif distFromPlayer < -trackLength / 2: distFromPlayer += trackLength
                     
-                    if 0 < distZ < 400 and abs(other['x'] - opp['x']) < 0.8: 
-                        # Foge para a faixa oposta
-                        opp['targetX'] = 1.2 if opp['x'] >= other['x'] else -1.2
-                        # Trava se estiver iminente
-                        if distZ < 150 and opp['speed'] > other['speed'] and abs(other['x'] - opp['x']) < 0.4:
-                            opp['speed'] = other['speed']
+                    if distFromPlayer < -10000: opp['maxSpeed'] = opp['baseMaxSpeed'] + 6
+                    elif distFromPlayer > 1200: opp['maxSpeed'] = opp['baseMaxSpeed'] - 3
+                    else: opp['maxSpeed'] = opp['baseMaxSpeed']
 
-                # 4. Radar Anticolisão Aprimorado: Bot contra Jogador
-                # Usa distToPlayer para considerar "retrovisores" (pontos cegos)
-                distToPlayer = playerVirtualZ - opp['z']
-                if distToPlayer > trackLength / 2: distToPlayer -= trackLength
-                elif distToPlayer < -trackLength / 2: distToPlayer += trackLength
+                    if opp['speed'] < opp['maxSpeed']: opp['speed'] += 2.5
+                    elif opp['speed'] > opp['maxSpeed']: opp['speed'] -= 1.0 
                 
-                # O bot deteta o jogador 400m atrás dele e 800m à frente
-                if -400 < distToPlayer < 800 and abs(playerX - opp['x']) < 0.9: 
-                    # Cancela mudança de faixa e afasta-se
-                    opp['targetX'] = 1.2 if opp['x'] >= playerX else -1.2
-                    # O Bot só puxa o travão de emergência se o jogador estiver BEM À FRENTE dele
-                    if 0 < distToPlayer < 100 and opp['speed'] > speed and abs(playerX - opp['x']) < 0.4:
-                        opp['speed'] = speed 
-                
-                # 5. Física do Bot (Força centrífuga o afeta também)
-                oppDriftForce = 0.0
-                isOppTurning = False
-                oppCentrifugal = 0.0
-                lateralDelta = 0.0 
-                
-                if oppAbsCurve > 0:
-                    oppDriftForce = (oppAbsCurve ** 0.6) * 0.015
-                    oppCentrifugal = oppDriftForce * (opp['speed'] / maxSpeed)
-                    opp['x'] += oppCentrifugal if oppCurve < 0 else -oppCentrifugal
-
-                dynamicBotSteer = max(0.04, oppCentrifugal + 0.015) 
-                
-                # Move visualmente o bot para o targetX selecionado
-                if opp['x'] < opp['targetX']:
-                    step = min(dynamicBotSteer, opp['targetX'] - opp['x'])
-                    opp['x'] += step
-                    lateralDelta = step 
-                    isOppTurning = True
-                elif opp['x'] > opp['targetX']:
-                    step = min(dynamicBotSteer, opp['x'] - opp['targetX'])
-                    opp['x'] -= step
-                    lateralDelta = -step 
-                    isOppTurning = True
-
-                opp['lateralDelta'] = lateralDelta # Usado para escolher o sprite de viragem
+                    oppSeg = lines[int(opp['z'] // self.segmentLength) % totalSegments]
+                    oppCurve = oppSeg.curve
+                    oppAbsCurve = abs(oppCurve)
                     
-                # Perde velocidade ao curvar muito, tal como o jogador
-                if isOppTurning and oppDriftForce > 0.015:
-                    targetOppSpeed = opp['maxSpeed'] - (oppDriftForce * 850)
-                    if opp['speed'] > targetOppSpeed: opp['speed'] -= 4.5
+                    opp['decisionTimer'] -= 1
+                    if opp['decisionTimer'] <= 0:
+                        opp['decisionTimer'] = random.randint(60, 120)
+                        if oppAbsCurve < 0.5: opp['targetX'] = random.choice([-1.2, -0.6, 0.0, 0.6, 1.2])
+                    
+                    for other in self.opponents:
+                        if other is opp: continue 
+                        distZ = other['z'] - opp['z']
+                        if distZ < 0: distZ += trackLength 
+                        
+                        if 0 < distZ < 400 and abs(other['x'] - opp['x']) < 0.8: 
+                            opp['targetX'] = 1.2 if opp['x'] >= other['x'] else -1.2
+                            if distZ < 150 and opp['speed'] > other['speed'] and abs(other['x'] - opp['x']) < 0.4:
+                                opp['speed'] = other['speed']
 
-                opp['x'] = max(-1.8, min(opp['x'], 1.8)) # Limita na pista
+                    distToPlayer = playerVirtualZ - opp['z']
+                    if distToPlayer > trackLength / 2: distToPlayer -= trackLength
+                    elif distToPlayer < -trackLength / 2: distToPlayer += trackLength
+                    
+                    if -400 < distToPlayer < 800 and abs(playerX - opp['x']) < 0.9: 
+                        opp['targetX'] = 1.2 if opp['x'] >= playerX else -1.2
+                        if 0 < distToPlayer < 100 and opp['speed'] > speed and abs(playerX - opp['x']) < 0.4:
+                            opp['speed'] = speed 
+                    
+                    oppDriftForce = 0.0
+                    isOppTurning = False
+                    oppCentrifugal = 0.0
+                    lateralDelta = 0.0 
+                    
+                    if oppAbsCurve > 0:
+                        oppDriftForce = (oppAbsCurve ** 0.6) * 0.015
+                        oppCentrifugal = oppDriftForce * (opp['speed'] / maxSpeed) if maxSpeed > 0 else 0
+                        opp['x'] += oppCentrifugal if oppCurve < 0 else -oppCentrifugal
+
+                    dynamicBotSteer = max(0.04, oppCentrifugal + 0.015) 
+                    
+                    if opp['x'] < opp['targetX']:
+                        step = min(dynamicBotSteer, opp['targetX'] - opp['x'])
+                        opp['x'] += step
+                        lateralDelta = step 
+                        isOppTurning = True
+                    elif opp['x'] > opp['targetX']:
+                        step = min(dynamicBotSteer, opp['x'] - opp['targetX'])
+                        opp['x'] -= step
+                        lateralDelta = -step 
+                        isOppTurning = True
+
+                    opp['lateralDelta'] = lateralDelta 
+                        
+                    if isOppTurning and oppDriftForce > 0.015:
+                        targetOppSpeed = opp['maxSpeed'] - (oppDriftForce * 850)
+                        if opp['speed'] > targetOppSpeed: opp['speed'] -= 4.5
+
+                    opp['x'] = max(-1.8, min(opp['x'], 1.8))
+                
                 opp['z'] = (opp['z'] + opp['speed']) % trackLength
-
-                # 6. Colisão Jogador bate no Bot por trás (Punição para o jogador)
+                opp['totalZ'] += opp['speed']
                 dzOpp = opp['z'] - pos
                 if dzOpp < 0: dzOpp += trackLength 
                 opp['dz'] = dzOpp 
                 
-                if playerVisualZ < dzOpp < playerVisualZ + 400 and abs(playerX - opp['x']) < 0.50:
-                    speed *= 0.3 # Jogador bateu, a velocidade cai drasticamente
-            
-            # --- FIM IA ---
+                if self.raceState != 'COUNTDOWN':
+                    if playerVisualZ < dzOpp < playerVisualZ + 400 and abs(playerX - opp['x']) < 0.50:
+                        speed *= 0.3
 
-            # Atualiza a posição do jogador no mundo
             speed = max(0, min(speed, currentMaxSpeed))
             absolutePos += speed
             pos = absolutePos % trackLength 
 
-            # Ordena os bots do mais distante ao mais próximo para renderizar corretamente (Painter's Algorithm)
             self.opponents.sort(key=lambda o: o['dz'], reverse=True)
 
-            # Câmara Debug (opcional)
-            if keys[pygame.K_w]: playerY += 100
-            if keys[pygame.K_s]: playerY -= 100
-            if keys[pygame.K_q]: playerPitchBase += 10 
-            if keys[pygame.K_e]: playerPitchBase -= 10 
-            if playerY < 500: playerY = 500
-
-            # --- PREPARAÇÃO DA CÂMARA (COLINAS E CURVAS) ---
-            # O Lookahead analisa os segmentos à frente para inclinar a câmara nas subidas/descidas
+            # Câmera
             lookahead = 3
             segmentoFrente = (startPos + lookahead) % totalSegments
             dy = lines[segmentoFrente].y - lines[startPos].y
             pitchAlvo = playerPitchBase + (-dy * 0.5)
-            smoothPitch += (pitchAlvo - smoothPitch) * 0.1 # Transição suave do movimento de colina
+            smoothPitch += (pitchAlvo - smoothPitch) * 0.1 
 
             camHeight = lines[startPos].y + playerY
             maxY = WINDOW_HEIGHT
 
-            # Deslocamento do fundo (Céu a mover na direção oposta à curva)
             self.bgOffsetX += rawCurve * speed * 0.0005
             self.backgroundRect.x = -(int(self.bgOffsetX) % self.bgWidth)
 
-            # Projeta o horizonte (onde o chão se encontra com o céu)
             farNode = startPos + self.showSegments - 1
             farLine = lines[farNode % totalSegments]
             farCamZ = pos - (totalSegments * self.segmentLength if farNode >= totalSegments else 0)
@@ -390,7 +389,6 @@ class GameWindow:
             else:
                 farY = WINDOW_HEIGHT / 2
             
-            # Renderiza o céu degradê e a imagem de fundo das montanhas/cidade
             drawStripedSky(self.windowSurface, SKY_COLOR_TOP, SKY_COLOR_BOTTOM, SKY_BAND_HEIGHT, farY)
             self.backgroundRect.bottom = int(farY) + 1 
             self.windowSurface.blit(self.backgroundSurface, self.backgroundRect)
@@ -399,34 +397,26 @@ class GameWindow:
             dx = 0.0  
             playerXWorld = playerX * 1000
 
-            # ==========================================
-            # RENDERIZAÇÃO 3D (DESENHAR A PISTA)
-            # ==========================================
+            # --- RENDERIZAÇÃO DA PISTA ---
             for n in range(startPos, startPos + self.showSegments):
                 currentLine = lines[n % totalSegments]
-                
-                # Converte as coordenadas 3D para o ecrã 2D
                 currentLine.project(playerXWorld - worldX, camHeight, pos - (totalSegments * self.segmentLength if n >= totalSegments else 0), smoothPitch, self.cameraDepth, self.roadWidth)
                 
                 worldX += dx
                 dx += currentLine.curve
-                currentLine.clip = maxY # Salva o limite inferior visível para não desenhar carros que estejam atrás das colinas
+                currentLine.clip = maxY 
 
-                if currentLine.Y >= maxY: continue # Se o segmento está atrás de uma colina, não desenha
+                if currentLine.Y >= maxY: continue 
                 maxY = currentLine.Y
                 prevLine = lines[(n - 1) % totalSegments]  
 
-                # Desenha Relva, Zebra (Rumble) e Asfalto
                 drawQuad(self.windowSurface, currentLine.grassColor, 0, prevLine.Y, WINDOW_WIDTH, 0, currentLine.Y, WINDOW_WIDTH)
                 drawQuad(self.windowSurface, currentLine.rumbleColor, prevLine.X, prevLine.Y, prevLine.W * 1.2, currentLine.X, currentLine.Y, currentLine.W * 1.2)
                 drawQuad(self.windowSurface, currentLine.roadColor, prevLine.X, prevLine.Y, prevLine.W, currentLine.X, currentLine.Y, currentLine.W)
 
-            # ==========================================
-            # RENDERIZAÇÃO DOS OPONENTES (BOTS)
-            # ==========================================
+            # --- RENDERIZAÇÃO DOS OPONENTES ---
             for opp in self.opponents:
                 dz = opp['dz']
-                # Só desenha se estiver dentro do raio de visão da câmara
                 if 0 < dz < (self.showSegments - 2) * self.segmentLength:
                     segIdx = int(opp['z'] // self.segmentLength) % totalSegments
                     
@@ -435,49 +425,34 @@ class GameWindow:
                     
                     if line1.scale == 0 or line2.scale == 0: continue
                     
-                    # Interpolação para colocar o carro suavemente entre dois segmentos
                     percent = (opp['z'] % self.segmentLength) / self.segmentLength
                     destX = line1.X + (line2.X - line1.X) * percent
                     destY = line1.Y + (line2.Y - line1.Y) * percent
                     destW = line1.W + (line2.W - line1.W) * percent
                     
-                    # --- CORREÇÃO DE ESCALA DOS BOTS (Mantém a proporção real) ---
-                    # A largura de referência na pista
                     baseTargetW = destW * 0.28
-                    # A largura original do sprite recto serve de âncora
                     baseSpriteW = self.rawCarSprites['S'][0].get_width()
-                    # Qual deve ser a escala deste sprite nesta distância específica
                     escalaDistancia = baseTargetW / baseSpriteW
 
-                    # Escolhe o Sprite de direção com base na força da curva e no movimento lateral
                     turnForce = line1.curve + (opp.get('lateralDelta', 0.0) * 80.0)
                     oppSteer = 'S'
                     
-                    # Lógica corrigida das janelas de curva
-                    if turnForce < -1.0: 
-                        oppSteer = 'L' if turnForce < -3.0 else 'SL'
-                    elif turnForce > 1.0: 
-                        oppSteer = 'R' if turnForce > 3.0 else 'SR'
+                    if turnForce < -1.0: oppSteer = 'L' if turnForce < -3.0 else 'SL'
+                    elif turnForce > 1.0: oppSteer = 'R' if turnForce > 3.0 else 'SR'
                     
-                    # Alterna entre os 2 frames para simular a rotação do pneu/movimento
                     oppFrame = 0 if (int(opp['z']) % 400) < 200 else 1
                     currentOppSprite = self.rawCarSprites[oppSteer][oppFrame]
                     
-                    # Aplica a escala exata e proporcional, evitando o "encolhimento"
                     finalW = currentOppSprite.get_width() * escalaDistancia
                     finalH = currentOppSprite.get_height() * escalaDistancia
-                    
-                    # Simula os solavancos do carro em alta velocidade
                     oppBounce = (baseTargetW * 0.02) if (opp['speed'] > 0 and (int(opp['z']) % 300) < 150) else 0
                     
-                    # Posição final no ecrã
                     renderX = destX + (opp['x'] * destW * 0.5) - (finalW / 2)
                     renderY = destY - finalH - oppBounce 
                     
-                    # Corta a imagem (Crop) se parte do carro estiver atrás de uma colina
                     clipH = renderY + finalH - line1.clip
                     if clipH < 0: clipH = 0
-                    if clipH >= finalH: continue # Carro 100% escondido
+                    if clipH >= finalH: continue 
                     if finalW > WINDOW_WIDTH * 1.5 or finalW <= 0 or finalH <= 0: continue 
                     
                     try:
@@ -485,20 +460,15 @@ class GameWindow:
                         cropSurface = scaledSprite.subsurface(0, 0, int(finalW), int(finalH - clipH))
                         self.windowSurface.blit(cropSurface, (int(renderX), int(renderY)))
                     except ValueError:
-                        pass # Proteção contra erros matemáticos de subsuperfície
+                        pass 
 
-            # ==========================================
-            # RENDERIZAÇÃO DO JOGADOR
-            # ==========================================
-            # Controla a velocidade de alternância dos frames do jogador
-            if speed > 0:
-                animTimer = (animTimer + speed) % 1500
+            # --- RENDERIZAÇÃO DO JOGADOR ---
+            if speed > 0: animTimer = (animTimer + speed) % 1500
             
             animFrame = 0 if animTimer < 750 else 1  
             carImage = self.carSprites[steerState][animFrame]
             carRect = carImage.get_rect()
             
-            # Bounce (salto) do jogador. Mais violento se estiver na relva.
             bounceOffset = 0
             if speed > 0:
                 bounceOffset = 2 if (int(pos) % 400) < 200 else 0
@@ -511,24 +481,31 @@ class GameWindow:
             # ==========================================
             # UI (HUD - INTERFACE DO UTILIZADOR)
             # ==========================================
-            # Velocímetro
-            speedText = self.hudFont.render(f"{int(speed)} KM/H", True, (255, 255, 255))
-            pygame.draw.rect(self.windowSurface, (0, 0, 0), pygame.Rect(15, 15, speedText.get_width() + 20, speedText.get_height() + 10))
-            
-            # Fica Azul Ciano se estiver a receber bónus de vácuo (estilingue)
+            # 1. Velocímetro
             speedColor = (0, 255, 255) if draftBonus > 0.5 else (255, 255, 255)
-            self.windowSurface.blit(self.hudFont.render(f"{int(speed)} KM/H", True, speedColor), (25, 20))
+            self.draw_hud(f"{int(speed)} KM/H", self.hudFont, speedColor, 25, 20, "left")
             
-            # Contador de Voltas
+            # 2. Voltas
             displayLap = min(currentLap, maxLaps)
-            lapText = self.lapFont.render(f"LAP {displayLap}/{maxLaps}", True, (255, 200, 0))
-            self.windowSurface.blit(lapText, (WINDOW_WIDTH - lapText.get_width() - 20, 20))
+            self.draw_hud(f"LAP {displayLap}/{maxLaps}", self.lapFont, (255, 200, 0), WINDOW_WIDTH - 25, 20, "right")
             
-            # Fim de Jogo
-            if currentLap > maxLaps:
-                finishText = self.lapFont.render("FINISH!", True, (0, 255, 0))
-                self.windowSurface.blit(finishText, (WINDOW_WIDTH//2 - finishText.get_width()//2, 100))
+            # 3. Posição (Cálculo via Distância Total Absoluta)
+            distances = [absolutePos] + [o['totalZ'] for o in self.opponents]
+            distances.sort(reverse=True)
+            player_pos = distances.index(absolutePos) + 1
+            
+            sufixos = {1: "ST", 2: "ND", 3: "RD"}
+            pos_suffix = sufixos.get(player_pos, "TH")
+            self.draw_hud(f"POS {player_pos}{pos_suffix}", self.lapFont, (255, 255, 255), WINDOW_WIDTH - 25, 75, "right")
 
-            # Renderiza o frame e espera (60 FPS)
+            # 4. Mensagens Centrais
+            if self.raceState == 'COUNTDOWN' and countdown_text:
+                cor_timer = (255, 0, 0) if countdown_text != "GO!" else (0, 255, 0)
+                self.draw_hud(countdown_text, self.lapFont, cor_timer, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
+
+            if self.raceState == 'FINISHED':
+                self.draw_hud("FINISH!", self.lapFont, (0, 255, 0), WINDOW_WIDTH // 2, 100, "center")
+                self.draw_hud("AUTOPILOT ENGAGED", self.hudFont, (200, 200, 200), WINDOW_WIDTH // 2, 160, "center")
+
             pygame.display.update()
             self.clock.tick(60)
