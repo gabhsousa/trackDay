@@ -59,12 +59,15 @@ class GameWindow:
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
         basePath = os.path.join(diretorioAtual, "sprites", "cars", "280GTO")
 
+        # --- CARREGAR SPRITES ESTÁTICOS DA PISTA ---
         self.trackSprites = {}
         try:
             self.trackSprites['PD'] = pygame.image.load("sprites/track/PD.png").convert_alpha()
             self.trackSprites['PE'] = pygame.image.load("sprites/track/PE.png").convert_alpha()
+            # Carrega o Pórtico de Largada
+            self.trackSprites['START'] = pygame.image.load("sprites/track/start.png").convert_alpha()
         except FileNotFoundError:
-            print("Aviso: Placas PD/PE não encontradas!")
+            print("Aviso: Placas PD/PE ou START não encontradas!")
 
         try:
             self.rawCarSprites = {
@@ -115,10 +118,23 @@ class GameWindow:
         totalSegments = len(lines)
         trackLength = totalSegments * self.segmentLength
 
-        # Variáveis de estado do Jogador e Corrida
-        absolutePos = 0.0
-        maxLaps = 5  # Alterado para 5 voltas
-        playerX = 0.0
+# --- CONFIGURAÇÃO DO GRID DE LARGADA ---
+        linha_largada_z = 25 * self.segmentLength 
+        # O 1º carro nasce 4 segmentos atrás da linha
+        primeira_fileira_z = linha_largada_z - (4 * self.segmentLength) 
+        
+        # Aumentamos a distância para 800 (4 segmentos) de respiro entre as fileiras
+        distancia_entre_fileiras = 2000
+
+        # O Jogador fica na 5ª fileira (índice 4), ao lado do Bot 8
+        player_virtual_z = primeira_fileira_z - (4 * distancia_entre_fileiras)
+        playerVisualZ = 780 # O deslocamento interno do seu motor 3D
+        
+        # Compensamos a câmara para que o SEU carro caia perfeitamente na posição do grid
+        absolutePos = player_virtual_z - playerVisualZ 
+        
+        maxLaps = 5  
+        playerX = 0.8 # Jogador nasce na direita da pista (alinhado ao grid)
         playerY = 1250
         playerPitchBase = 150
         smoothPitch = 0.0
@@ -132,22 +148,31 @@ class GameWindow:
         turnTimer = 0
 
         # Máquina de Estado da Corrida
-        self.raceState = 'COUNTDOWN' # Pode ser 'COUNTDOWN', 'RACING', 'FINISHED'
+        self.raceState = 'COUNTDOWN' 
         self.countdownStartTick = pygame.time.get_ticks()
         self.finishStartTick = 0
         countdown_text = None
 
         # --- INICIALIZAÇÃO DOS OPONENTES ---
         self.opponents = []
+        
+        # Grid de Corrida: 2 carros por fileira
         for i in range(9):
             baseSpeed = 240 + (i * 3)
-            start_z = (i + 1) * 1500.0
+            
+            # Calcula em qual fileira o bot está (0, 1, 2, 3 ou 4)
+            fileira = i // 2 
+            start_z = primeira_fileira_z - (fileira * distancia_entre_fileiras)
+            
+            # Posição X: Alterna entre Esquerda (-0.8) e Direita (0.8)
+            pos_x = -0.8 if i % 2 == 0 else 0.8
+            
             self.opponents.append({
                 'id': i, 
                 'z': start_z,
-                'totalZ': start_z, # Para calcular posições corretamente
-                'x': (i % 3) * 1.2 - 1.2,
-                'targetX': (i % 3) * 1.2 - 1.2,
+                'totalZ': start_z, 
+                'x': pos_x,
+                'targetX': pos_x,
                 'speed': 0.0, 
                 'baseMaxSpeed': baseSpeed, 
                 'maxSpeed': baseSpeed,
@@ -451,20 +476,30 @@ class GameWindow:
                     sprite_img = self.trackSprites.get(line.sprite)
                     
                     if sprite_img and line.scale > 0:
-                        # As placas terão cerca de 20% do tamanho da meia-pista
-                        targetSignW = line.W * 0.25
+                        # O Pórtico de largada precisa ser muito maior que as placas de curva
+                        if line.sprite == 'START':
+                            targetSignW = line.W * 1.5 
+                        else:
+                            targetSignW = line.W * 0.25
+                            
                         escalaSign = targetSignW / sprite_img.get_width()
                         
                         finalW = int(sprite_img.get_width() * escalaSign)
                         finalH = int(sprite_img.get_height() * escalaSign)
                         
                         if finalW > 0 and finalH > 0:
-                            # X central do sprite + deslocamento lateral
+                            # Posição X da beirada da pista
                             destX = line.X + (line.spriteX * line.W)
-                            renderX = destX - (finalW / 2)
+                            
+                            if line.sprite == 'START':
+                                # Alinha o poste (que fica no começo da imagem) com a beirada da grama
+                                renderX = destX 
+                            else:
+                                # Centraliza as setas de curva normalmente
+                                renderX = destX - (finalW / 2)
+                                
                             renderY = line.Y - finalH
                             
-                            # Clipping (não desenhar abaixo da colina / horizonte)
                             clipH = renderY + finalH - line.clip
                             if clipH < 0: clipH = 0
                             

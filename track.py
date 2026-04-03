@@ -90,6 +90,15 @@ class Track:
     def buildTrack(self):
         self.lines = []
         self.addRoad(enter=0, hold=100, leave=0, curve=0.0, y=0.0)
+        
+        # --- LINHA DE LARGADA ---
+        linha_idx = 25 
+        self.lines[linha_idx].sprite = 'START'
+        self.lines[linha_idx].spriteX = -1.8  # Mudado para a ESQUERDA para cruzar a pista!
+
+        for i in range(linha_idx, linha_idx + 2):
+            self.lines[i].roadColor = pygame.Color(255, 255, 255)
+        self.addRoad(enter=0, hold=100, leave=0, curve=0.0, y=0.0)
         self.addRoad(enter=40, hold=10, leave=5, curve=-15.0, y=-2500.0)
         self.addRoad(enter=5, hold=40, leave=10, curve=15.0, y=-5000.0)
         self.addRoad(enter=60, hold=80, leave=45, curve=-3.0, y=-5500.0)
