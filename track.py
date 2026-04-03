@@ -96,18 +96,6 @@ class Track:
         self.lines[linha_idx].sprite = 'START'
         self.lines[linha_idx].spriteX = -1.8
 
-        sponsors = ['HEUER', 'LONGHI', 'MARELLI', 'MARLBORO', 'PIRELLI', 'SHELL']
-        sponsor_idx = 0
-
-        for i in range(40, len(self.lines), 15):
-            line = self.lines[i]
-            
-            if line.sprite is None and abs(line.curve) <= 1.0:
-                line.sprite = sponsors[sponsor_idx % len(sponsors)]
-                line.spriteX = -1.5 if i % 2 == 0 else 1.5 
-                
-                sponsor_idx += 1
-
         for i in range(linha_idx, linha_idx + 2):
             self.lines[i].roadColor = pygame.Color(255, 255, 255)
         self.addRoad(enter=0, hold=100, leave=0, curve=0.0, y=0.0)
@@ -132,3 +120,45 @@ class Track:
         self.addRoad(enter=20, hold=100, leave=20, curve=-1.0, y=-1000.0)
         self.addRoad(enter=20, hold=150, leave=20, curve=-1.0, y=-500.0)
         self.addRoad(enter=30, hold=100, leave=30, curve=0.0, y=0.0)
+
+# =======================================================
+        # ESPALHAR OUTDOORS E BARREIRAS DE PNEUS (LADOS FIXOS)
+        # =======================================================
+        sponsors = ['HEUER', 'LONGHI', 'MARELLI', 'MARLBORO', 'PIRELLI', 'SHELL']
+        sponsor_idx = 0
+        
+        for i in range(40, len(self.lines)):
+            line = self.lines[i]
+            
+            # 1. Pula segmentos que já têm o Pórtico de START ou setas PD/PE
+            if line.sprite is not None:
+                continue
+                
+            # 2. Radar de Segurança: Deixa a área ao redor das setas (PD/PE) limpa
+            area_restrita = False
+            for k in range(max(0, i - 4), min(len(self.lines), i + 5)):
+                if self.lines[k].sprite in ['PD', 'PE']:
+                    area_restrita = True
+                    break
+                    
+            if area_restrita:
+                continue
+
+            # 3. Lógica de Distribuição Exclusiva (Lados Fixos)
+            if abs(line.curve) > 2.0:
+                # CURVAS FECHADAS: Apenas Muro de Pneus contínuo pelo LADO DE FORA
+                lado_fora = -1.5 if line.curve > 0 else 1.5
+                line.sprite = 'TYRE'
+                line.spriteX = lado_fora
+                
+            else:
+                # RETAS E CURVAS LEVES: Placas na Esquerda (-1.5), Pneus na Direita (1.5)
+                # A cada 35 segmentos, põe a placa no lado esquerdo
+                if i % 35 == 0:
+                    line.sprite = sponsors[sponsor_idx % len(sponsors)]
+                    line.spriteX = -1.5
+                    sponsor_idx += 1
+                # Nos restantes, preenche com pneus no lado direito
+                else:
+                    line.sprite = 'TYRE'
+                    line.spriteX = 1.5

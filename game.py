@@ -93,6 +93,8 @@ class GameWindow:
             self.trackSprites['MARLBORO'] = pygame.image.load("sprites/track/sponsors/marlboro.png").convert_alpha()
             self.trackSprites['PIRELLI'] = pygame.image.load("sprites/track/sponsors/pirelli.png").convert_alpha()
             self.trackSprites['SHELL'] = pygame.image.load("sprites/track/sponsors/shell.png").convert_alpha()
+
+            self.trackSprites['TYRE'] = pygame.image.load("sprites/track/tyre.png").convert_alpha()
             
         except FileNotFoundError:
             print("Aviso: Faltam imagens das placas ou patrocínios!")
@@ -503,11 +505,13 @@ class GameWindow:
                         
                         # 1. Pórtico de Largada (Gigante)
                         if line.sprite == 'START':
-                            targetSignW = line.W * 2.5 
+                            targetSignW = line.W * 2.0 
                         # 2. Placas de Curva (Pequenas)
                         elif line.sprite in ['PD', 'PE']:
                             targetSignW = line.W * 0.25
                         # 3. Outdoors de Patrocínio (Grandes)
+                        elif line.sprite == 'TYRE':
+                            targetSignW = line.W * 0.175
                         else:
                             targetSignW = line.W * 0.45
                             
