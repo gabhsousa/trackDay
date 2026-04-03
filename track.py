@@ -12,6 +12,9 @@ class Line:
         self.curve = 0.0  
         self.clip = 0.0  
 
+        self.sprite = None  
+        self.spriteX = 0.0
+
         self.grassColor: pygame.Color = DARK_GRASS
         self.rumbleColor: pygame.Color = BLACK_RUMBLE
         self.roadColor: pygame.Color = DARK_ROAD
@@ -50,6 +53,9 @@ class Track:
         startY = self.lines[-1].y if len(self.lines) > 0 else 0.0
         total = enter + hold + leave
         currentSegment = 0
+        
+        # Guarda o segmento exato onde essa parte da pista começou
+        start_n = len(self.lines)
 
         for i in range(enter):
             curveTime = i / enter if enter > 0 else 0
@@ -68,6 +74,18 @@ class Track:
             yTime = currentSegment / total if total > 0 else 0
             self.addSegment(curve * easeInOut(1 - curveTime), startY + (y - startY) * easeInOut(yTime))
             currentSegment += 1
+
+        if abs(curve) > 1.0:
+            sign_type = 'PD' if curve > 0 else 'PE'
+            sign_x = -1.5 if curve > 0 else 1.5
+            
+            sign_start = max(0, start_n - 20)
+            sign_end = start_n + enter + (hold)
+            
+            for i in range(sign_start, sign_end, 4):
+                if i < len(self.lines):
+                    self.lines[i].sprite = sign_type
+                    self.lines[i].spriteX = sign_x
 
     def buildTrack(self):
         self.lines = []

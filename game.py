@@ -59,6 +59,13 @@ class GameWindow:
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
         basePath = os.path.join(diretorioAtual, "sprites", "cars", "280GTO")
 
+        self.trackSprites = {}
+        try:
+            self.trackSprites['PD'] = pygame.image.load("sprites/track/PD.png").convert_alpha()
+            self.trackSprites['PE'] = pygame.image.load("sprites/track/PE.png").convert_alpha()
+        except FileNotFoundError:
+            print("Aviso: Placas PD/PE não encontradas!")
+
         try:
             self.rawCarSprites = {
                 'S':  [pygame.image.load(os.path.join(basePath, 'S.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'S2.png')).convert_alpha()],
@@ -414,10 +421,67 @@ class GameWindow:
                 drawQuad(self.windowSurface, currentLine.rumbleColor, prevLine.X, prevLine.Y, prevLine.W * 1.2, currentLine.X, currentLine.Y, currentLine.W * 1.2)
                 drawQuad(self.windowSurface, currentLine.roadColor, prevLine.X, prevLine.Y, prevLine.W, currentLine.X, currentLine.Y, currentLine.W)
 
-            # --- RENDERIZAÇÃO DOS OPONENTES ---
+            # --- COLETAR TODOS OS OBJETOS PARA RENDERIZAR ---
+            renderables = []
+            
+            # 1. Coletar Placas
+            for n in range(startPos, startPos + self.showSegments):
+                line = lines[n % totalSegments]
+                if line.sprite and line.Y < WINDOW_HEIGHT:
+                    # Distância aproximada deste segmento até a câmera
+                    dz = line.z - pos
+                    if dz < 0: dz += trackLength
+                    renderables.append({'type': 'sign', 'dz': dz, 'line': line})
+
+            # 2. Coletar Oponentes
             for opp in self.opponents:
                 dz = opp['dz']
                 if 0 < dz < (self.showSegments - 2) * self.segmentLength:
+                    renderables.append({'type': 'opp', 'dz': dz, 'opp': opp})
+
+            # Ordenar tudo do mais distante (maior 'dz') para o mais próximo (menor 'dz')
+            renderables.sort(key=lambda x: x['dz'], reverse=True)
+
+            # --- RENDERIZAR NA ORDEM CORRETA ---
+            for obj in renderables:
+                
+                # --- DESENHAR PLACAS ---
+                if obj['type'] == 'sign':
+                    line = obj['line']
+                    sprite_img = self.trackSprites.get(line.sprite)
+                    
+                    if sprite_img and line.scale > 0:
+                        # As placas terão cerca de 20% do tamanho da meia-pista
+                        targetSignW = line.W * 0.25
+                        escalaSign = targetSignW / sprite_img.get_width()
+                        
+                        finalW = int(sprite_img.get_width() * escalaSign)
+                        finalH = int(sprite_img.get_height() * escalaSign)
+                        
+                        if finalW > 0 and finalH > 0:
+                            # X central do sprite + deslocamento lateral
+                            destX = line.X + (line.spriteX * line.W)
+                            renderX = destX - (finalW / 2)
+                            renderY = line.Y - finalH
+                            
+                            # Clipping (não desenhar abaixo da colina / horizonte)
+                            clipH = renderY + finalH - line.clip
+                            if clipH < 0: clipH = 0
+                            
+                            if clipH < finalH:
+                                try:
+                                    scaledSprite = pygame.transform.scale(sprite_img, (finalW, finalH))
+                                    if clipH > 0:
+                                        cropSurface = scaledSprite.subsurface(0, 0, finalW, int(finalH - clipH))
+                                        self.windowSurface.blit(cropSurface, (int(renderX), int(renderY)))
+                                    else:
+                                        self.windowSurface.blit(scaledSprite, (int(renderX), int(renderY)))
+                                except ValueError:
+                                    pass
+
+                # --- DESENHAR OPONENTES ---
+                elif obj['type'] == 'opp':
+                    opp = obj['opp']
                     segIdx = int(opp['z'] // self.segmentLength) % totalSegments
                     
                     line1 = lines[segIdx]
@@ -460,7 +524,7 @@ class GameWindow:
                         cropSurface = scaledSprite.subsurface(0, 0, int(finalW), int(finalH - clipH))
                         self.windowSurface.blit(cropSurface, (int(renderX), int(renderY)))
                     except ValueError:
-                        pass 
+                        pass
 
             # --- RENDERIZAÇÃO DO JOGADOR ---
             if speed > 0: animTimer = (animTimer + speed) % 1500
