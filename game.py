@@ -16,7 +16,7 @@ class GameWindow:
     def __init__(self):
         # Inicialização da janela principal do Pygame
         self.windowSurface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        pygame.display.set_caption("TrackDay - Arcade Bots com Efeito Estilingue")
+        pygame.display.set_caption("TrackDay")
         self.clock = pygame.time.Clock()
         
         # Configuração das fontes para o HUD
