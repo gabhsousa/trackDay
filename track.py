@@ -94,7 +94,19 @@ class Track:
         # --- LINHA DE LARGADA ---
         linha_idx = 25 
         self.lines[linha_idx].sprite = 'START'
-        self.lines[linha_idx].spriteX = -1.8  # Mudado para a ESQUERDA para cruzar a pista!
+        self.lines[linha_idx].spriteX = -1.8
+
+        sponsors = ['HEUER', 'LONGHI', 'MARELLI', 'MARLBORO', 'PIRELLI', 'SHELL']
+        sponsor_idx = 0
+
+        for i in range(40, len(self.lines), 15):
+            line = self.lines[i]
+            
+            if line.sprite is None and abs(line.curve) <= 1.0:
+                line.sprite = sponsors[sponsor_idx % len(sponsors)]
+                line.spriteX = -1.5 if i % 2 == 0 else 1.5 
+                
+                sponsor_idx += 1
 
         for i in range(linha_idx, linha_idx + 2):
             self.lines[i].roadColor = pygame.Color(255, 255, 255)

@@ -69,6 +69,34 @@ class GameWindow:
         except FileNotFoundError:
             print("Aviso: Placas PD/PE ou START não encontradas!")
 
+        self.startLights = {}
+        try:
+            self.startLights['3'] = pygame.image.load("sprites/track/start/3.png").convert_alpha()
+            self.startLights['2'] = pygame.image.load("sprites/track/start/2.png").convert_alpha()
+            self.startLights['1'] = pygame.image.load("sprites/track/start/1.png").convert_alpha()
+            self.startLights['GO'] = pygame.image.load("sprites/track/start/GO.png").convert_alpha()
+                
+        except FileNotFoundError:
+            print("Aviso: Imagens do semáforo (1, 2, 3, GO) não encontradas!")
+
+        # --- CARREGAR SPRITES ESTÁTICOS DA PISTA ---
+        self.trackSprites = {}
+        try:
+            self.trackSprites['PD'] = pygame.image.load("sprites/track/PD.png").convert_alpha()
+            self.trackSprites['PE'] = pygame.image.load("sprites/track/PE.png").convert_alpha()
+            self.trackSprites['START'] = pygame.image.load("sprites/track/start.png").convert_alpha()
+            
+            # --- OUTDOORS DE PATROCÍNIO ---
+            self.trackSprites['HEUER'] = pygame.image.load("sprites/track/sponsors/heuer.png").convert_alpha()
+            self.trackSprites['LONGHI'] = pygame.image.load("sprites/track/sponsors/longhi.png").convert_alpha()
+            self.trackSprites['MARELLI'] = pygame.image.load("sprites/track/sponsors/marelli.png").convert_alpha()
+            self.trackSprites['MARLBORO'] = pygame.image.load("sprites/track/sponsors/marlboro.png").convert_alpha()
+            self.trackSprites['PIRELLI'] = pygame.image.load("sprites/track/sponsors/pirelli.png").convert_alpha()
+            self.trackSprites['SHELL'] = pygame.image.load("sprites/track/sponsors/shell.png").convert_alpha()
+            
+        except FileNotFoundError:
+            print("Aviso: Faltam imagens das placas ou patrocínios!")
+
         try:
             self.rawCarSprites = {
                 'S':  [pygame.image.load(os.path.join(basePath, 'S.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'S2.png')).convert_alpha()],
@@ -210,17 +238,13 @@ class GameWindow:
             
             # --- GESTÃO DE ESTADOS (LARGADA E FINAL) ---
             if self.raceState == 'COUNTDOWN':
-                # Bloqueia os controles do jogador
+                # Bloqueia os controles do jogador e dos bots
                 cmd_up = cmd_down = cmd_left = cmd_right = False
                 
                 elapsed = currentTick - self.countdownStartTick
-                if elapsed < 1000: countdown_text = "3"
-                elif elapsed < 2000: countdown_text = "2"
-                elif elapsed < 3000: countdown_text = "1"
-                elif elapsed < 4000: countdown_text = "GO!"
-                else: 
+                # Exatamente aos 3 segundos (3000ms), a corrida começa!
+                if elapsed >= 3000: 
                     self.raceState = 'RACING'
-                    countdown_text = None
                     
             elif self.raceState == 'RACING':
                 if currentLap > maxLaps:
@@ -476,11 +500,16 @@ class GameWindow:
                     sprite_img = self.trackSprites.get(line.sprite)
                     
                     if sprite_img and line.scale > 0:
-                        # O Pórtico de largada precisa ser muito maior que as placas de curva
+                        
+                        # 1. Pórtico de Largada (Gigante)
                         if line.sprite == 'START':
-                            targetSignW = line.W * 1.5 
-                        else:
+                            targetSignW = line.W * 2.5 
+                        # 2. Placas de Curva (Pequenas)
+                        elif line.sprite in ['PD', 'PE']:
                             targetSignW = line.W * 0.25
+                        # 3. Outdoors de Patrocínio (Grandes)
+                        else:
+                            targetSignW = line.W * 0.45
                             
                         escalaSign = targetSignW / sprite_img.get_width()
                         
@@ -488,14 +517,12 @@ class GameWindow:
                         finalH = int(sprite_img.get_height() * escalaSign)
                         
                         if finalW > 0 and finalH > 0:
-                            # Posição X da beirada da pista
                             destX = line.X + (line.spriteX * line.W)
                             
+                            # O START prende no canto, o resto (Curvas e Outdoors) é centralizado no poste
                             if line.sprite == 'START':
-                                # Alinha o poste (que fica no começo da imagem) com a beirada da grama
-                                renderX = destX 
+                                renderX = destX
                             else:
-                                # Centraliza as setas de curva normalmente
                                 renderX = destX - (finalW / 2)
                                 
                             renderY = line.Y - finalH
@@ -597,10 +624,21 @@ class GameWindow:
             pos_suffix = sufixos.get(player_pos, "TH")
             self.draw_hud(f"POS {player_pos}{pos_suffix}", self.lapFont, (255, 255, 255), WINDOW_WIDTH - 25, 75, "right")
 
-            # 4. Mensagens Centrais
-            if self.raceState == 'COUNTDOWN' and countdown_text:
-                cor_timer = (255, 0, 0) if countdown_text != "GO!" else (0, 255, 0)
-                self.draw_hud(countdown_text, self.lapFont, cor_timer, WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
+# 4. Mensagens Centrais / Semáforo de Largada
+            elapsed_start = currentTick - self.countdownStartTick
+            
+            # Exibe a sequência de luzes até 3500ms (meio segundo após o GO)
+            if elapsed_start < 3500:
+                light_sprite = None
+                
+                if elapsed_start < 1000: light_sprite = self.startLights.get('3')
+                elif elapsed_start < 2000: light_sprite = self.startLights.get('2')
+                elif elapsed_start < 3000: light_sprite = self.startLights.get('1')
+                elif elapsed_start < 3500: light_sprite = self.startLights.get('GO')
+                    
+                if light_sprite:
+                    light_rect = light_sprite.get_rect(center=(WINDOW_WIDTH // 2, 300))
+                    self.windowSurface.blit(light_sprite, light_rect)
 
             if self.raceState == 'FINISHED':
                 self.draw_hud("FINISH!", self.lapFont, (0, 255, 0), WINDOW_WIDTH // 2, 100, "center")
