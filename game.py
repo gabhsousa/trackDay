@@ -71,20 +71,25 @@ class GameWindow:
         self.backgroundRect = self.backgroundSurface.get_rect(topleft=(-self.bgWidth, 0))
         self.bgOffsetX = 0.0
 
-        # --- CARREGAR SPRITES DOS CARROS ---
-        self.rawCarSprites = {}
-        diretorioAtual = os.path.dirname(os.path.abspath(__file__))
-        basePath = os.path.join(diretorioAtual, "sprites", "cars", "959")
-
-        # --- CARREGAR SPRITES ESTÁTICOS DA PISTA ---
+        # --- CARREGAR SPRITES ESTÁTICOS DA PISTA E SEMÁFORO ---
         self.trackSprites = {}
         try:
+            # Placas de direção e Pórtico
             self.trackSprites['PD'] = pygame.image.load("sprites/track/PD.png").convert_alpha()
             self.trackSprites['PE'] = pygame.image.load("sprites/track/PE.png").convert_alpha()
-            # Carrega o Pórtico de Largada
             self.trackSprites['START'] = pygame.image.load("sprites/track/start.png").convert_alpha()
+            
+            # Outdoors de Patrocínio
+            self.trackSprites['HEUER'] = pygame.image.load("sprites/track/sponsors/heuer.png").convert_alpha()
+            self.trackSprites['LONGHI'] = pygame.image.load("sprites/track/sponsors/longhi.png").convert_alpha()
+            self.trackSprites['MARELLI'] = pygame.image.load("sprites/track/sponsors/marelli.png").convert_alpha()
+            self.trackSprites['MARLBORO'] = pygame.image.load("sprites/track/sponsors/marlboro.png").convert_alpha()
+            self.trackSprites['PIRELLI'] = pygame.image.load("sprites/track/sponsors/pirelli.png").convert_alpha()
+            self.trackSprites['SHELL'] = pygame.image.load("sprites/track/sponsors/shell.png").convert_alpha()
+            self.trackSprites['TYRE'] = pygame.image.load("sprites/track/tyre.png").convert_alpha()
+            
         except FileNotFoundError:
-            print("Aviso: Placas PD/PE ou START não encontradas!")
+            print("Aviso: Faltam imagens das placas ou patrocínios!")
 
         self.startLights = {}
         try:
@@ -96,50 +101,60 @@ class GameWindow:
         except FileNotFoundError:
             print("Aviso: Imagens do semáforo (1, 2, 3, GO) não encontradas!")
 
-        # --- CARREGAR SPRITES ESTÁTICOS DA PISTA ---
-        self.trackSprites = {}
-        try:
-            self.trackSprites['PD'] = pygame.image.load("sprites/track/PD.png").convert_alpha()
-            self.trackSprites['PE'] = pygame.image.load("sprites/track/PE.png").convert_alpha()
-            self.trackSprites['START'] = pygame.image.load("sprites/track/start.png").convert_alpha()
-            
-            # --- OUTDOORS DE PATROCÍNIO ---
-            self.trackSprites['HEUER'] = pygame.image.load("sprites/track/sponsors/heuer.png").convert_alpha()
-            self.trackSprites['LONGHI'] = pygame.image.load("sprites/track/sponsors/longhi.png").convert_alpha()
-            self.trackSprites['MARELLI'] = pygame.image.load("sprites/track/sponsors/marelli.png").convert_alpha()
-            self.trackSprites['MARLBORO'] = pygame.image.load("sprites/track/sponsors/marlboro.png").convert_alpha()
-            self.trackSprites['PIRELLI'] = pygame.image.load("sprites/track/sponsors/pirelli.png").convert_alpha()
-            self.trackSprites['SHELL'] = pygame.image.load("sprites/track/sponsors/shell.png").convert_alpha()
+        # --- CARREGAR SPRITES DOS CARROS (TODOS OS MODELOS) ---
+        self.carModels = ['288GTO', '959', 'Testarossa', 'XJR15']
+        self.playerModel = '959' # <--- Escolhe aqui o teu carro!
 
-            self.trackSprites['TYRE'] = pygame.image.load("sprites/track/tyre.png").convert_alpha()
-            
-        except FileNotFoundError:
-            print("Aviso: Faltam imagens das placas ou patrocínios!")
-
-        try:
-            self.rawCarSprites = {
-                'S':  [pygame.image.load(os.path.join(basePath, 'S.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'S2.png')).convert_alpha()],
-                'L':  [pygame.image.load(os.path.join(basePath, 'L.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'L2.png')).convert_alpha()],
-                'SL': [pygame.image.load(os.path.join(basePath, 'SL.png')).convert_alpha(),  pygame.image.load(os.path.join(basePath, 'SL2.png')).convert_alpha()],
-                'R':  [pygame.image.load(os.path.join(basePath, 'R.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'R2.png')).convert_alpha()],
-                'SR': [pygame.image.load(os.path.join(basePath, 'SR.png')).convert_alpha(),  pygame.image.load(os.path.join(basePath, 'SR2.png')).convert_alpha()]
-            }
-        except FileNotFoundError:
-            surface = pygame.Surface((150, 80))
-            surface.fill((255, 0, 0))
-            self.rawCarSprites = {k: [surface, surface] for k in ['S', 'L', 'SL', 'R', 'SR']}
-
-        carTargetWidth = 300
-        imagemReta = self.rawCarSprites['S'][0]
-        fatorEscala = carTargetWidth / imagemReta.get_width()
-
+        self.allRawCarSprites = {}
         self.carSprites = {}
-        for state, images in self.rawCarSprites.items():
-            self.carSprites[state] = []
-            for img in images:
-                nW = int(img.get_width() * fatorEscala)
-                nH = int(img.get_height() * fatorEscala)
-                self.carSprites[state].append(pygame.transform.scale(img, (nW, nH)))
+        
+        diretorioAtual = os.path.dirname(os.path.abspath(__file__))
+        carTargetWidth = 300 
+
+        # 1. Carrega todos os 4 modelos na memória
+        for model in self.carModels:
+            basePath = os.path.join(diretorioAtual, "sprites", "cars", model)
+            try:
+                self.allRawCarSprites[model] = {
+                    'S':  [pygame.image.load(os.path.join(basePath, 'S.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'S2.png')).convert_alpha()],
+                    'L':  [pygame.image.load(os.path.join(basePath, 'L.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'L2.png')).convert_alpha()],
+                    'SL': [pygame.image.load(os.path.join(basePath, 'SL.png')).convert_alpha(),  pygame.image.load(os.path.join(basePath, 'SL2.png')).convert_alpha()],
+                    'R':  [pygame.image.load(os.path.join(basePath, 'R.png')).convert_alpha(),   pygame.image.load(os.path.join(basePath, 'R2.png')).convert_alpha()],
+                    'SR': [pygame.image.load(os.path.join(basePath, 'SR.png')).convert_alpha(),  pygame.image.load(os.path.join(basePath, 'SR2.png')).convert_alpha()]
+                }
+            except FileNotFoundError:
+                print(f"Aviso: Sprites do carro {model} não encontrados!")
+                continue
+
+            # 2. Se for o carro do PLAYER, cria a versão já na escala certa (para uso na tela)
+            if model == self.playerModel:
+                imagemReta = self.allRawCarSprites[model]['S'][0]
+                fatorEscala = carTargetWidth / imagemReta.get_width()
+                for state, images in self.allRawCarSprites[model].items():
+                    self.carSprites[state] = []
+                    for img in images:
+                        nW = int(img.get_width() * fatorEscala)
+                        nH = int(img.get_height() * fatorEscala)
+                        self.carSprites[state].append(pygame.transform.scale(img, (nW, nH)))
+
+        # --- CARREGAR SPRITES DE FUMAÇA (SOMENTE DO PLAYER) ---
+        self.smokeSprites = {'S': [], 'L': [], 'R': []}
+        try:
+            img_referencia_carro = self.allRawCarSprites[self.playerModel]['S'][0]
+            escala_fumaca = carTargetWidth / img_referencia_carro.get_width()
+            basePathPlayer = os.path.join(diretorioAtual, "sprites", "cars", self.playerModel)
+
+            for i in range(1, 4): 
+                imgS = pygame.image.load(os.path.join(basePathPlayer, 'effects', f'S{i}.png')).convert_alpha()
+                imgL = pygame.image.load(os.path.join(basePathPlayer, 'effects', f'L{i}.png')).convert_alpha()
+                imgR = pygame.image.load(os.path.join(basePathPlayer, 'effects', f'R{i}.png')).convert_alpha()
+                
+                self.smokeSprites['S'].append(pygame.transform.scale(imgS, (int(imgS.get_width() * escala_fumaca), int(imgS.get_height() * escala_fumaca))))
+                self.smokeSprites['L'].append(pygame.transform.scale(imgL, (int(imgL.get_width() * escala_fumaca), int(imgL.get_height() * escala_fumaca))))
+                self.smokeSprites['R'].append(pygame.transform.scale(imgR, (int(imgR.get_width() * escala_fumaca), int(imgR.get_height() * escala_fumaca))))
+        except FileNotFoundError:
+            print(f"Aviso: Efeitos de fumaça não encontrados para o modelo {self.playerModel}!")
+
 
     def draw_hud(self, text, font, color, x, y, align="left"):
         """Função auxiliar para desenhar o texto com traçado preto (outline)"""
@@ -176,23 +191,21 @@ class GameWindow:
         center_msg = ""
         center_msg_timer = 0
 
-# --- CONFIGURAÇÃO DO GRID DE LARGADA ---
+        # --- CONFIGURAÇÃO DO GRID DE LARGADA ---
         linha_largada_z = 25 * self.segmentLength 
-        # O 1º carro nasce 4 segmentos atrás da linha
-        primeira_fileira_z = linha_largada_z - (4 * self.segmentLength) 
-        
-        # Aumentamos a distância para 800 (4 segmentos) de respiro entre as fileiras
+        primeira_fileira_z = linha_largada_z - (14 * self.segmentLength) 
         distancia_entre_fileiras = 2000
 
-        # O Jogador fica na 5ª fileira (índice 4), ao lado do Bot 8
-        player_virtual_z = primeira_fileira_z - (4 * distancia_entre_fileiras)
-        playerVisualZ = 780 # O deslocamento interno do seu motor 3D
+        # Jogador ocupa a vaga 11 (A última vaga de um grid de 0 a 11, ou seja, 6ª fileira)
+        posicao_jogador = 16
+        fileira_jogador = posicao_jogador // 2
         
-        # Compensamos a câmara para que o SEU carro caia perfeitamente na posição do grid
+        player_virtual_z = primeira_fileira_z - (fileira_jogador * distancia_entre_fileiras)
+        playerVisualZ = 780 
         absolutePos = player_virtual_z - playerVisualZ 
         
         maxLaps = 5  
-        playerX = 0.8 # Jogador nasce na direita da pista (alinhado ao grid)
+        playerX = 1.1 # Nasce do lado direito da pista
         playerY = 1250
         playerPitchBase = 150
         smoothPitch = 0.0
@@ -204,8 +217,18 @@ class GameWindow:
         
         animTimer = 0
         turnTimer = 0
+        is_drifting = False
 
-        # Máquina de Estado da Corrida
+        # --- SORTEIO DA DISTRIBUIÇÃO DOS BOTS ---
+        bot_models_list = []
+        for model in self.carModels:
+            if model == self.playerModel:
+                bot_models_list.extend([model] * 3) # 2 iguais ao do player
+            else:
+                bot_models_list.extend([model] * 4) # 3 de cada um dos outros (3x3 = 9)
+                
+        random.shuffle(bot_models_list) # Mistura a urna!
+
         self.raceState = 'COUNTDOWN' 
         self.countdownStartTick = pygame.time.get_ticks()
         self.finishStartTick = 0
@@ -214,28 +237,31 @@ class GameWindow:
         # --- INICIALIZAÇÃO DOS OPONENTES ---
         self.opponents = []
         
-        # Grid de Corrida: 2 carros por fileira
-        for i in range(9):
-            baseSpeed = 245 + ((8 - i) * 2) 
+        slots_ocupados = 0
+        for i in range(15): # Cria o grid com 12 slots (0 a 11)
+            if i == posicao_jogador:
+                continue # O slot 11 é do player, pula a criação de bot aqui
+                
+            baseSpeed = 258 + ((15 - i) * 0.6) 
             
             fileira = i // 2 
             start_z = primeira_fileira_z - (fileira * distancia_entre_fileiras)
             pos_x = -1.1 if i % 2 == 0 else 1.1
             
             self.opponents.append({
-                'id': i, 
+                'id': i,
+                'model': bot_models_list[slots_ocupados], # Atribui o carro sorteado
                 'z': start_z,
                 'totalZ': start_z, 
                 'x': pos_x,
                 'targetX': pos_x,
                 'speed': 0.0, 
                 'baseMaxSpeed': baseSpeed, 
-                'maxSpeed': baseSpeed,
-                # Aceleração inicial mais agressiva para eles sumirem na frente
-                'accel': 2.0 + ((8 - i) * 0.2), 
+                'accel': 2.0 + ((15 - i) * 0.15), 
                 'decisionTimer': random.randint(0, 100),
                 'lateralDelta': 0.0
             })
+            slots_ocupados += 1
 
         # ==========================================
         # GAME LOOP PRINCIPAL
@@ -309,11 +335,11 @@ class GameWindow:
                 for opp in self.opponents:
                     dz = opp['z'] - playerVirtualZ
                     if dz < 0: dz += trackLength 
-                    if 50 < dz < 6000 and abs(opp['x'] - playerX) < 0.3:
+                    if 50 < dz < 7000 and abs(opp['x'] - playerX) < 0.3:
                         isDrafting = True
                         break
             
-            if isDrafting: draftBonus = min(10.0, draftBonus + 0.15)
+            if isDrafting: draftBonus = min(14.0, draftBonus + 0.15)
             else: draftBonus = max(0.0, draftBonus - 0.05)
             maxSpeed = basePlayerMaxSpeed + draftBonus
 
@@ -386,8 +412,8 @@ class GameWindow:
                     if distFromPlayer > trackLength / 2: distFromPlayer -= trackLength
                     elif distFromPlayer < -trackLength / 2: distFromPlayer += trackLength
                     
-                    if distFromPlayer < -10000: opp['maxSpeed'] = opp['baseMaxSpeed'] + 6
-                    elif distFromPlayer > 1200: opp['maxSpeed'] = opp['baseMaxSpeed'] - 3
+                    if distFromPlayer < -6000: opp['maxSpeed'] = opp['baseMaxSpeed'] + 5
+                    elif distFromPlayer > 1500: opp['maxSpeed'] = opp['baseMaxSpeed'] - 3
                     else: opp['maxSpeed'] = opp['baseMaxSpeed']
 
                     if opp['speed'] < opp['maxSpeed']: opp['speed'] += opp.get('accel', 2.5)
@@ -447,8 +473,8 @@ class GameWindow:
                     opp['lateralDelta'] = lateralDelta 
                         
                     if isOppTurning and oppDriftForce > 0.015:
-                        targetOppSpeed = opp['maxSpeed'] - (oppDriftForce * 850)
-                        if opp['speed'] > targetOppSpeed: opp['speed'] -= 4.5
+                        targetOppSpeed = opp['maxSpeed'] - (oppDriftForce * 900)
+                        if opp['speed'] > targetOppSpeed: opp['speed'] -= 5.0
 
                     opp['x'] = max(-1.8, min(opp['x'], 1.8))
                 
@@ -589,7 +615,7 @@ class GameWindow:
                                 except ValueError:
                                     pass
 
-                # --- DESENHAR OPONENTES ---
+                    # --- DESENHAR OPONENTES ---
                 elif obj['type'] == 'opp':
                     opp = obj['opp']
                     segIdx = int(opp['z'] // self.segmentLength) % totalSegments
@@ -605,7 +631,9 @@ class GameWindow:
                     destW = line1.W + (line2.W - line1.W) * percent
                     
                     baseTargetW = destW * 0.28
-                    baseSpriteW = self.rawCarSprites['S'][0].get_width()
+                    
+                    # LINHA ALTERADA: Puxa a referência de tamanho baseada no modelo DESTE bot
+                    baseSpriteW = self.allRawCarSprites[opp['model']]['S'][0].get_width()
                     escalaDistancia = baseTargetW / baseSpriteW
 
                     turnForce = line1.curve + (opp.get('lateralDelta', 0.0) * 80.0)
@@ -615,7 +643,9 @@ class GameWindow:
                     elif turnForce > 1.0: oppSteer = 'R' if turnForce > 3.0 else 'SR'
                     
                     oppFrame = 0 if (int(opp['z']) % 400) < 200 else 1
-                    currentOppSprite = self.rawCarSprites[oppSteer][oppFrame]
+                    
+                    # LINHA ALTERADA: Puxa o sprite exato do carro que foi sorteado
+                    currentOppSprite = self.allRawCarSprites[opp['model']][oppSteer][oppFrame]
                     
                     finalW = currentOppSprite.get_width() * escalaDistancia
                     finalH = currentOppSprite.get_height() * escalaDistancia
@@ -651,6 +681,54 @@ class GameWindow:
             carRect.centerx = WINDOW_WIDTH // 2 
             carRect.bottom = (WINDOW_HEIGHT - 30) - bounceOffset
             self.windowSurface.blit(carImage, carRect)
+
+            # ==========================================
+            # RENDERIZAÇÃO DA FUMAÇA (EFEITOS DO PLAYER)
+            # ==========================================
+            
+            # 1. Atualiza a "memória" de derrapagem (USANDO A GEOMETRIA DA PISTA)
+            # O carro só derrapa se a curva for mais forte que 2.0 (ignora curvas suaves)
+            limite_curva_fechada = 3.0 
+            
+            # Quebra a tração se: Curva forte + volante no máximo (L ou R) + alta velocidade
+            if absCurve > limite_curva_fechada and steerState in ['L', 'R'] and speed > 180:
+                is_drifting = True  
+            # Retoma a tração se: Curva acabou/ficou reta, velocidade caiu muito ou soltou o volante
+            elif absCurve < 1.0 or speed < 120 or steerState == 'S':
+                is_drifting = False 
+                
+            # 2. Condições para a fumaça aparecer
+            tempo_corrida = currentTick - self.countdownStartTick - 3000
+            is_patinando_largada = (self.raceState == 'RACING' and 0 <= tempo_corrida < 2000 and cmd_up)
+            
+            # Esporádica: Só rola se a flag is_drifting estiver True e o volante minimamente virado
+            is_fumaca_curva = (is_drifting and steerState in ['L', 'R', 'SL', 'SR'])
+            is_fumaca_esporadica = is_fumaca_curva and (random.random() < 0.5)
+
+            if (is_patinando_largada or is_fumaca_esporadica) and self.smokeSprites.get('S'):
+                
+                if is_fumaca_curva:
+                    estado_fumaca = 'L' if steerState in ['L', 'SL'] else 'R'
+                else:
+                    estado_fumaca = 'S' # Fumaça reta da largada
+                
+                # Animação
+                frame_fumaca = (currentTick // 80) % 3 
+                img_fumaca = self.smokeSprites[estado_fumaca][frame_fumaca]
+                rect_fumaca = img_fumaca.get_rect()
+                
+                # Pulo
+                rect_fumaca.bottom = carRect.bottom
+                
+                # Alinhamento inteligente da sobra da fumaça
+                if estado_fumaca == 'S':
+                    rect_fumaca.centerx = carRect.centerx
+                elif estado_fumaca == 'L':
+                    rect_fumaca.left = carRect.left
+                elif estado_fumaca == 'R':
+                    rect_fumaca.right = carRect.right
+                    
+                self.windowSurface.blit(img_fumaca, rect_fumaca)
 
             # ==========================================
             # UI (HUD) - VELOCÍMETRO TOP GEAR (PRECISÃO)
