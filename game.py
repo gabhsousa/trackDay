@@ -24,10 +24,12 @@ class GameWindow:
         try:
             self.hudFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 20)
             self.lapFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 30)
+            self.finishFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 50) # Adicione esta linha!
         except FileNotFoundError:
             print("Aviso: Fonte 8-bit não encontrada. Usando fonte padrão.")
             self.hudFont = pygame.font.SysFont('Courier New', 24, bold=True)
             self.lapFont = pygame.font.SysFont('Courier New', 34, bold=True)
+            self.finishFont = pygame.font.SysFont('Courier New', 54, bold=True) # Adicione esta linha!
 
         self.digiGreen = (50, 255, 50)  # Verde normal
         self.digiGreenDark = (0, 40, 0) # Fundo do verde
@@ -72,7 +74,7 @@ class GameWindow:
         # --- CARREGAR SPRITES DOS CARROS ---
         self.rawCarSprites = {}
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
-        basePath = os.path.join(diretorioAtual, "sprites", "cars", "280GTO")
+        basePath = os.path.join(diretorioAtual, "sprites", "cars", "959")
 
         # --- CARREGAR SPRITES ESTÁTICOS DA PISTA ---
         self.trackSprites = {}
@@ -169,6 +171,10 @@ class GameWindow:
         lines = self.track.lines
         totalSegments = len(lines)
         trackLength = totalSegments * self.segmentLength
+        last_lap = 1
+        last_player_pos = None
+        center_msg = ""
+        center_msg_timer = 0
 
 # --- CONFIGURAÇÃO DO GRID DE LARGADA ---
         linha_largada_z = 25 * self.segmentLength 
@@ -210,7 +216,7 @@ class GameWindow:
         
         # Grid de Corrida: 2 carros por fileira
         for i in range(9):
-            baseSpeed = 246 + ((8 - i) * 2) 
+            baseSpeed = 245 + ((8 - i) * 2) 
             
             fileira = i // 2 
             start_z = primeira_fileira_z - (fileira * distancia_entre_fileiras)
@@ -253,6 +259,10 @@ class GameWindow:
             # Descobre em que parte do circuito o jogador está
             pos = absolutePos % trackLength 
             currentLap = int(absolutePos // trackLength) + 1
+            if currentLap > last_lap and currentLap <= maxLaps:
+                center_msg = f"LAP: {currentLap}"
+                center_msg_timer = 120
+                last_lap = currentLap
 
             startPos = int(pos // self.segmentLength)
             startSegment = lines[startPos % totalSegments]
@@ -273,6 +283,10 @@ class GameWindow:
                 if currentLap > maxLaps:
                     self.raceState = 'FINISHED'
                     self.finishStartTick = currentTick
+                    
+                    distances = [absolutePos] + [o['totalZ'] for o in self.opponents]
+                    distances.sort(reverse=True)
+                    self.final_position = distances.index(absolutePos) + 1
                     
             elif self.raceState == 'FINISHED':
                 # Inteligência Artificial pilota o carro do jogador
@@ -300,7 +314,7 @@ class GameWindow:
                         break
             
             if isDrafting: draftBonus = min(10.0, draftBonus + 0.15)
-            else: draftBonus = max(0.0, draftBonus - 0.10)
+            else: draftBonus = max(0.0, draftBonus - 0.05)
             maxSpeed = basePlayerMaxSpeed + draftBonus
 
             # --- FÍSICA: FORÇA CENTRÍFUGA ---
@@ -327,8 +341,8 @@ class GameWindow:
                 elif speed < 0: speed += 2
 
             steerState = 'S'
-            baseSteer = 0.06
-            steerCap = 0.09
+            baseSteer = 0.07
+            steerCap = 0.10
             steerAmount = 0.0
             isTurning = False
 
@@ -646,32 +660,63 @@ class GameWindow:
             else:
                 speedColor, digiDark = self.digiGreen, self.digiGreenDark
 
-            # 1. Âncora de posição
-            base_y = 110
-            vx_num = WINDOW_WIDTH - 285 # Puxamos um pouco mais para a direita
+            # --- PARÂMETROS DE AJUSTE MANUAL ---
+            margem_lateral = 25  # Distância padrão para a borda direita
+            base_y = 110         # Alinhamento inferior (mantenha igual para ambos)
             
-            # 2. Dimensões compactas para eliminar sobras
+            # Dimensões dos retângulos (mexa aqui se o fundo estiver grande ou pequeno demais)
             num_w, num_h = 175, 85 
             unit_w, unit_h = 92, 38 
+            espacamento_entre_blocos = 12
 
-            # 3. BLOCO DOS NÚMEROS
+            # Cálculo automático da posição para respeitar a borda
+            largura_total = num_w + espacamento_entre_blocos + unit_w
+            vx_num = WINDOW_WIDTH - largura_total - margem_lateral 
+            
+            # 1. BLOCO DOS NÚMEROS
+            # Se quiser o fundo mais largo para a esquerda, aumente o +18
             pygame.draw.rect(self.windowSurface, (0, 0, 0), (vx_num, base_y - num_h, num_w + 18, num_h))
             
-            # Ajuste de Y (-92) para os números subirem e ficarem centralizados no quadrado menor
+            # AJUSTE DO TEXTO (NÚMEROS): 
+            # -82 controla a altura. Se o número estiver "caído", diminua para -85 ou -90.
             self.draw_hud("888", self.speedFont, digiDark, vx_num, base_y - 82, "left")
             str_speed = f"{int(speed):03d}"
             self.draw_hud(str_speed, self.speedFont, speedColor, vx_num, base_y - 82, "left")
 
-            # 4. BLOCO KM/H (Colado e compacto)
-            vx_unit = vx_num + num_w + 12
+            # 2. BLOCO KM/H
+            vx_unit = vx_num + num_w + espacamento_entre_blocos
             pygame.draw.rect(self.windowSurface, (0, 0, 0), (vx_unit, base_y - unit_h, unit_w, unit_h))
             
-            # Ajuste de Y (-42) para o KM/H não ficar com sobra no topo
+            # AJUSTE DO TEXTO (KM/H):
+            # -28 controla a altura. Se o texto estiver voando, aumente para -35 ou -40.
             self.draw_hud("KM/H", self.hudFont, speedColor, vx_unit + 6, base_y - 28, "left")
 
-            # ==========================================
-            # RESTANTE DA HUD (POSIÇÃO E VOLTAS)
-            # ==========================================
+            if self.raceState == 'COUNTDOWN':
+                race_time = 0
+            elif self.raceState == 'RACING':
+                race_time = currentTick - self.countdownStartTick - 3000
+            elif self.raceState == 'FINISHED':
+                race_time = self.finishStartTick - self.countdownStartTick - 3000
+
+            # Evita tempo negativo por qualquer imprecisão dos ticks
+            race_time = max(0, race_time)
+            
+            minutos = race_time // 60000
+            segundos = (race_time % 60000) // 1000
+            centesimos = (race_time % 1000) // 10  
+            
+            # Formatando a string no padrão: 00'00''00
+            time_str = f"{minutos:02d}'{segundos:02d}''{centesimos:02d}"
+            
+            # Definindo âncora Y logo abaixo do velocímetro (o base_y original)
+            timer_y = base_y + 15
+            
+            # Calcula o centro exato entre o bloco de números e o bloco KM/H
+            timer_right_x = vx_unit + unit_w 
+            
+            # Desenha a fonte maior (lapFont), branca e alinhada na direita
+            self.draw_hud(time_str, self.lapFont, (255, 255, 255), timer_right_x, timer_y, "right")
+
             bottom_y = WINDOW_HEIGHT - 60
             
             # Voltas (Inferior Esquerdo)
@@ -679,13 +724,31 @@ class GameWindow:
             self.draw_hud(f"LAP {displayLap}/{maxLaps}", self.lapFont, (255, 255, 255), 30, bottom_y, "left")
             
             # Posição (Inferior Direito)
-            distances = [absolutePos] + [o['totalZ'] for o in self.opponents]
-            distances.sort(reverse=True)
-            player_pos = distances.index(absolutePos) + 1
-            
+            if self.raceState == 'FINISHED':
+                player_pos = self.final_position
+            else:
+                distances = [absolutePos] + [o['totalZ'] for o in self.opponents]
+                distances.sort(reverse=True)
+                player_pos = distances.index(absolutePos) + 1
+                
             sufixos = {1: "ST", 2: "ND", 3: "RD"}
             pos_suffix = sufixos.get(player_pos, "TH")
             self.draw_hud(f"{player_pos}{pos_suffix}", self.lapFont, (255, 255, 255), WINDOW_WIDTH - 30, bottom_y, "right")
+
+            # --- GATILHO DE ULTRAPASSAGEM ---
+            if last_player_pos is None:
+                last_player_pos = player_pos
+            elif player_pos != last_player_pos:
+                center_msg = f"{player_pos}{pos_suffix}"
+                center_msg_timer = 120
+                last_player_pos = player_pos
+                
+            if center_msg_timer > 0:
+                if self.raceState == 'RACING':
+                    if (center_msg_timer // 10) % 2 == 0:
+                        self.draw_hud(center_msg, self.lapFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 120, "center")
+                
+                center_msg_timer -= 1
 
 # 4. Mensagens Centrais / Semáforo de Largada
             elapsed_start = currentTick - self.countdownStartTick
@@ -704,8 +767,8 @@ class GameWindow:
                     self.windowSurface.blit(light_sprite, light_rect)
 
             if self.raceState == 'FINISHED':
-                self.draw_hud("FINISH!", self.lapFont, (0, 255, 0), WINDOW_WIDTH // 2, 100, "center")
-                self.draw_hud("AUTOPILOT ENGAGED", self.hudFont, (200, 200, 200), WINDOW_WIDTH // 2, 160, "center")
+                if (currentTick // 500) % 2 == 0:
+                    self.draw_hud("FINISH!", self.finishFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
 
             pygame.display.update()
             self.clock.tick(60)
