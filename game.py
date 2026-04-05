@@ -474,7 +474,12 @@ class GameWindow:
                 # Volta ao menu após 5 segundos
                 if currentTick - self.finishStartTick > 5000:
                     self._muteEngine()
-                    return True
+
+                    final_time = self.finishStartTick - self.countdownStartTick - 3000
+                    return {
+                        'position': self.final_position, 
+                        'time': max(0, final_time)
+                    }
 
             # --- SISTEMA DE VÁCUO (SLIPSTREAM) ---
             isDrafting = False

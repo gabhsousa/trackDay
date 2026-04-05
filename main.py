@@ -1,6 +1,6 @@
 import pygame
 from game import GameWindow
-from menu import StartMenu, CarSelectMenu, CarInfoMenu, TrackInfoMenu 
+from menu import StartMenu, CarSelectMenu, CarInfoMenu, TrackInfoMenu, ResultsMenu
 
 if __name__ == "__main__":
     pygame.init()
@@ -10,6 +10,7 @@ if __name__ == "__main__":
     menu_carro = CarSelectMenu(jogo.windowSurface)
     menu_carro_info = CarInfoMenu(jogo.windowSurface) 
     menu_pista_info = TrackInfoMenu(jogo.windowSurface)
+    menu_resultados = ResultsMenu(jogo.windowSurface)
     
     campeonato = ["ITA", "AUS", "BRA"]
     
@@ -32,6 +33,8 @@ if __name__ == "__main__":
         
         musica_atual = musicas["MENU"]
 
+        resultados_campeonato = []
+
         for track_id in campeonato:
             nova_musica = musicas[track_id]
             
@@ -46,9 +49,17 @@ if __name__ == "__main__":
 
             menu_pista_info.run(track_id)
             
-            completou_corrida = jogo.run(track_id)
+            dados_corrida = jogo.run(track_id)
             
-            if not completou_corrida:
+            if not dados_corrida:
+                resultados_campeonato = []
                 break
+            
+            dados_corrida['track'] = track_id
+            resultados_campeonato.append(dados_corrida)
         
-        pygame.mixer.music.fadeout(2000)
+        if len(resultados_campeonato) == len(campeonato):
+            pygame.mixer.music.fadeout(1500)
+            menu_resultados.run(resultados_campeonato)
+        else:
+            pygame.mixer.music.fadeout(1000)

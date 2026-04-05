@@ -229,6 +229,101 @@ class LoreMenu:
                 fade_surf.set_alpha(int(alpha)); self.screen.blit(fade_surf, (0,0))
             pygame.display.update()
 
-# Aliases mantidos
 CarInfoMenu = LoreMenu
 TrackInfoMenu = lambda screen: LoreMenu(screen, is_track=True)
+
+class ResultsMenu:
+    def __init__(self, screen):
+        self.screen = screen
+        self.clock = pygame.time.Clock()
+        try: self.font = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 16)
+        except: self.font = pygame.font.SysFont('Arial', 16)
+        try: self.title_font = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 30)
+        except: self.title_font = pygame.font.SysFont('Arial', 30)
+        try: self.sel_sound = pygame.mixer.Sound("sfx/Select.wav")
+        except: self.sel_sound = None
+
+    def format_time(self, ms):
+        minutos = ms // 60000
+        segundos = (ms % 60000) // 1000
+        centesimos = (ms % 1000) // 10
+        return f"{minutos:02d}'{segundos:02d}''{centesimos:02d}"
+
+    def calc_points(self, pos, time_ms, track_id):
+        multiplicador_posicao = {1: 10, 2: 8, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1}
+        peso = multiplicador_posicao.get(pos, 0)
+        
+        if time_ms <= 0:
+            return 0.0, 1.0
+            
+        pontos_pelo_tempo = 10000000 / time_ms
+        
+        pontos_finais = pontos_pelo_tempo * peso
+        
+        return pontos_finais, float(peso)
+
+    def run(self, resultados):
+        self.clock.tick()
+        running = True
+        
+        total_points = 0.0 
+        for r in resultados:
+            pts, _ = self.calc_points(r['position'], r['time'], r['track'])
+            total_points += pts
+            
+        nomes_pistas = {'ITA': 'MONZA', 'AUS': 'R. BULL RING', 'BRA': 'INTERLAGOS'}
+
+        fade_surf = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        fade_surf.fill((0,0,0))
+        alpha = 255
+        
+        while running:
+            dt = self.clock.tick(60)
+            if dt > 50: dt = 50
+            
+            alpha = max(0, alpha - (255/1000)*dt)
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+                if event.type == pygame.KEYDOWN and alpha == 0:
+                    if event.key == pygame.K_RETURN:
+                        if self.sel_sound: self.sel_sound.play()
+                        running = False
+            
+            self.screen.fill((0, 0, 0))
+            
+            draw_menu_text(self.screen, "CHAMPIONSHIP RESULTS", self.title_font, (255, 255, 50), WINDOW_WIDTH//2, 80, "center")
+            
+            y = 180
+            for r in resultados:
+                nome = nomes_pistas.get(r['track'], r['track'])
+                sufixos = {1: "ST", 2: "ND", 3: "RD"}
+                pos_str = f"{r['position']}{sufixos.get(r['position'], 'TH')}"
+                
+                tempo = self.format_time(r['time'])
+                
+                pts, mult = self.calc_points(r['position'], r['time'], r['track'])
+                
+                draw_menu_text(self.screen, nome, self.font, (255,255,255), 40, y, "left")
+                draw_menu_text(self.screen, pos_str, self.font, (255,255,50), WINDOW_WIDTH//2 - 140, y, "center")
+                draw_menu_text(self.screen, tempo, self.font, (255,255,255), WINDOW_WIDTH//2 - 10, y, "center")
+                
+                draw_menu_text(self.screen, f"x{mult:.2f}", self.font, (255,0,0), WINDOW_WIDTH//2 + 100, y, "center")
+                draw_menu_text(self.screen, f"{pts:.2f}", self.font, (255,255,50), WINDOW_WIDTH - 40, y, "right")
+                
+                y += 60
+                
+            pygame.draw.line(self.screen, (255,255,255), (40, y), (WINDOW_WIDTH-40, y), 2)
+            y += 40
+            
+            draw_menu_text(self.screen, "TOTAL SCORE:", self.title_font, (255,255,255), 40, y, "left")
+            draw_menu_text(self.screen, f"{total_points:.2f}", self.title_font, (255,255,50), WINDOW_WIDTH - 40, y, "right")
+            
+            if (pygame.time.get_ticks() // 500) % 2 == 0:
+                draw_menu_text(self.screen, "PRESS ENTER TO RESTART", self.font, (150,150,150), WINDOW_WIDTH//2, WINDOW_HEIGHT - 50, "center")
+            
+            if alpha > 0:
+                fade_surf.set_alpha(int(alpha))
+                self.screen.blit(fade_surf, (0,0))
+                
+            pygame.display.update()
