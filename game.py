@@ -359,6 +359,14 @@ class GameWindow:
                     'lateralDelta': 0.0
                 })
                 slots_ocupados += 1
+                
+        fade_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        fade_surface.fill((0, 0, 0))
+        fade_alpha = 255
+        fading_in = True
+        is_aborting = False
+
+        self.clock.tick()
         # ==========================================
         # GAME LOOP PRINCIPAL
         # ==========================================
@@ -372,7 +380,7 @@ class GameWindow:
             ratioVelocidade = max(0.0, min(speed / basePlayerMaxSpeed, 1.0))
             
             # Volume mestre do motor
-            masterVolume = 0.1
+            masterVolume = 0.2
             
             volumeLow = ((1.0 - ratioVelocidade) ** 0.5) * masterVolume
             volumeHigh = (ratioVelocidade ** 0.5) * masterVolume
@@ -388,8 +396,7 @@ class GameWindow:
                     pygame.quit()
                     sys.exit()
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self._muteEngine()
-                    return  # Volta para seleção de pista
+                    is_aborting = True
 
             keys = pygame.key.get_pressed()
             
@@ -467,7 +474,7 @@ class GameWindow:
                 # Volta ao menu após 5 segundos
                 if currentTick - self.finishStartTick > 5000:
                     self._muteEngine()
-                    return
+                    return True
 
             # --- SISTEMA DE VÁCUO (SLIPSTREAM) ---
             isDrafting = False
@@ -1032,6 +1039,37 @@ class GameWindow:
                 if self.raceState == 'FINISHED':
                     if (currentTick // 500) % 2 == 0:
                         self.draw_hud("FINISH!", self.finishFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
+            # ==========================================
+            # DESENHO DOS FADES DE ENTRADA E SAÍDA
+            # ==========================================
+            dt = self.clock.get_time() # Tempo desde o último frame
+
+            if dt > 50: dt = 50
+            
+            if fading_in:
+                fade_alpha -= (255 / 1000) * dt # Fade in de 1s
+                if fade_alpha <= 0:
+                    fade_alpha = 0
+                    fading_in = False
+                    
+            elif is_aborting:
+                fade_alpha += (255 / 500) * dt # Fade out rápido de 0.5s ao apertar ESC
+                if fade_alpha >= 255:
+                    self._muteEngine()
+                    return False
+                    
+            elif self.raceState == 'FINISHED':
+                elapsed_finish = currentTick - self.finishStartTick
+                # A tela de FINISH dura 5000ms. O escurecimento começa aos 4000ms!
+                if elapsed_finish > 4000:
+                    fade_alpha += (255 / 1000) * dt
+                    if fade_alpha >= 255:
+                        fade_alpha = 255
+            
+            if fade_alpha > 0:
+                fade_surface.set_alpha(int(fade_alpha))
+                self.windowSurface.blit(fade_surface, (0, 0))
+            # ==========================================
 
             pygame.display.update()
             self.clock.tick(60)

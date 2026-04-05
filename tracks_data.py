@@ -15,7 +15,7 @@ TRACKS = [
     {
         "id": "BRA",
         "name": "Interlagos",
-        "laps": 5,
+        "laps": 4,
         "background": "sprites/bg/L1.png",
         "bg_scale": 6,
         "sky_top": (0, 60, 150),
@@ -59,7 +59,7 @@ TRACKS = [
     {
         "id": "ITA",
         "name": "Monza",
-        "laps": 5,
+        "laps": 4,
         "background": "sprites/bg/L3.png",
         "bg_scale": 6,
         "sky_top": (0, 60, 150),
@@ -102,7 +102,7 @@ TRACKS = [
     {
         "id": "AUS",
         "name": "Red Bull Ring",
-        "laps": 6,
+        "laps": 5,
         "background": "sprites/bg/L2.png",
         "bg_scale": 6,
         "sky_top": (0, 60, 150),
