@@ -8,6 +8,8 @@ from config import *
 from utils import drawQuad, drawStripedSky
 from track import Track
 
+import numpy as np
+
 class GameWindow:
     """
     Classe principal que gere o estado do jogo, o loop principal, 
@@ -40,6 +42,37 @@ class GameWindow:
             self.speedFont = pygame.font.Font('fonts/dseg7-classic-latin-700-italic.ttf', 80)
         except FileNotFoundError:
             self.speedFont = pygame.font.SysFont('Courier New', 80, bold=True, italic=True)
+
+        # --- NOVO: SISTEMA DE ÁUDIO ---
+        pygame.mixer.init()
+        self.readySound = pygame.mixer.Sound("sfx/Ready.wav")
+        self.goSound = pygame.mixer.Sound("sfx/Go.wav")
+        self.skidSound = pygame.mixer.Sound("sfx/Skid.wav")
+        self.collisionSound = pygame.mixer.Sound("sfx/Collision.wav")
+
+        som_motor_base = pygame.mixer.Sound("sfx/Engine.wav")
+        versoesMotor = self._gerarPitchMotor(som_motor_base, steps=2, pitchMin=1.0, pitchMax=1.20)
+        som_motor_agudo = versoesMotor[1]
+
+        # Canais exclusivos
+        self.engineChannelLow = pygame.mixer.Channel(0)
+        self.engineChannelHigh = pygame.mixer.Channel(2)
+        self.skidChannel = pygame.mixer.Channel(1)
+
+        # Ligar AMBOS os sons em loop infinito desde o início da app!
+        self.engineChannelLow.play(som_motor_base, loops=-1)
+        self.engineChannelHigh.play(som_motor_agudo, loops=-1)
+        
+        # Volume a zero por enquanto (para não fazer barulho no ecrã de loading)
+        self.engineChannelLow.set_volume(0.0)
+        self.engineChannelHigh.set_volume(0.0)
+
+        self.collisionCooldown = 0
+
+        self.hasPlayedReady3 = False
+        self.hasPlayedReady2 = False
+        self.hasPlayedReady1 = False
+        self.hasPlayedGo = False
 
         # Configurações do motor de renderização pseudo-3D
         self.roadWidth = 2000
@@ -155,6 +188,42 @@ class GameWindow:
         except FileNotFoundError:
             print(f"Aviso: Efeitos de fumaça não encontrados para o modelo {self.playerModel}!")
 
+    def _gerarPitchMotor(self, baseSound, steps=40, pitchMin=0.8, pitchMax=1.20):
+        """
+        Gera versões do som usando interpolação linear (suavização) 
+        para evitar que o áudio fique crackelando.
+        """
+        try:
+            audioArray = pygame.sndarray.array(baseSound)
+        except Exception as e:
+            print(f"Erro ao processar áudio: {e}")
+            return [baseSound] * steps
+
+        generatedSounds = []
+        pitches = np.linspace(pitchMin, pitchMax, steps)
+        
+        # Eixo de tempo original
+        tOld = np.arange(len(audioArray))
+
+        for pitch in pitches:
+            # Novo eixo de tempo ajustado pela velocidade da marcha
+            tNew = np.arange(0, len(audioArray) - 1, pitch)
+            
+            # Aplica a interpolação linear para suavizar a onda
+            if len(audioArray.shape) == 2: # Áudio Estéreo
+                newArray = np.zeros((len(tNew), 2), dtype=np.float32)
+                newArray[:, 0] = np.interp(tNew, tOld, audioArray[:, 0])
+                newArray[:, 1] = np.interp(tNew, tOld, audioArray[:, 1])
+            else: # Áudio Mono
+                newArray = np.interp(tNew, tOld, audioArray).astype(np.float32)
+
+            # Converte de volta para o formato original do Pygame (16-bit) e garante alinhamento de memória
+            newArray = newArray.astype(audioArray.dtype)
+            newArray = np.ascontiguousarray(newArray)
+            
+            generatedSounds.append(pygame.sndarray.make_sound(newArray))
+            
+        return generatedSounds
 
     def draw_hud(self, text, font, color, x, y, align="left"):
         """Função auxiliar para desenhar o texto com traçado preto (outline)"""
@@ -242,7 +311,7 @@ class GameWindow:
             if i == posicao_jogador:
                 continue # O slot 11 é do player, pula a criação de bot aqui
                 
-            baseSpeed = 258 + ((15 - i) * 0.6) 
+            baseSpeed = 258 + ((15 - i) * 0.5) 
             
             fileira = i // 2 
             start_z = primeira_fileira_z - (fileira * distancia_entre_fileiras)
@@ -257,17 +326,34 @@ class GameWindow:
                 'targetX': pos_x,
                 'speed': 0.0, 
                 'baseMaxSpeed': baseSpeed, 
-                'accel': 2.0 + ((15 - i) * 0.15), 
+                'accel': 2.0 + ((15 - i) * 0.13), 
                 'decisionTimer': random.randint(0, 100),
                 'lateralDelta': 0.0
             })
             slots_ocupados += 1
-
         # ==========================================
         # GAME LOOP PRINCIPAL
         # ==========================================
         while True:
             currentTick = pygame.time.get_ticks()
+
+            if self.collisionCooldown > 0:
+                self.collisionCooldown -= 1
+            
+            # --- ÁUDIO DO MOTOR (BLENDING DE POTÊNCIA CONSTANTE) ---
+            ratioVelocidade = max(0.0, min(speed / basePlayerMaxSpeed, 1.0))
+            
+            # Volume mestre do motor
+            masterVolume = 0.2
+            
+            volumeLow = ((1.0 - ratioVelocidade) ** 0.5) * masterVolume
+            volumeHigh = (ratioVelocidade ** 0.5) * masterVolume
+            
+            if ratioVelocidade < 0.1:
+                volumeLow = max(volumeLow, masterVolume * 0.7)
+                
+            self.engineChannelLow.set_volume(volumeLow)
+            self.engineChannelHigh.set_volume(volumeHigh)
             
             for event in pygame.event.get([pygame.QUIT]):
                 if event.type == pygame.QUIT:
@@ -310,9 +396,10 @@ class GameWindow:
                     self.raceState = 'FINISHED'
                     self.finishStartTick = currentTick
                     
-                    distances = [absolutePos] + [o['totalZ'] for o in self.opponents]
+                    playerRealZ = absolutePos + playerVisualZ
+                    distances = [playerRealZ] + [o['totalZ'] for o in self.opponents]
                     distances.sort(reverse=True)
-                    self.final_position = distances.index(absolutePos) + 1
+                    self.final_position = distances.index(playerRealZ) + 1
                     
             elif self.raceState == 'FINISHED':
                 # Inteligência Artificial pilota o carro do jogador
@@ -442,10 +529,16 @@ class GameWindow:
                     if distToPlayer > trackLength / 2: distToPlayer -= trackLength
                     elif distToPlayer < -trackLength / 2: distToPlayer += trackLength
                     
-                    if -400 < distToPlayer < 800 and abs(playerX - opp['x']) < 0.9: 
-                        opp['targetX'] = 1.2 if opp['x'] >= playerX else -1.2
-                        if 0 < distToPlayer < 100 and opp['speed'] > speed and abs(playerX - opp['x']) < 0.4:
+                    if 0 < distToPlayer < 2000: 
+                        if abs(playerX - opp['x']) < 1.2 and opp['speed'] > speed:
+                            opp['targetX'] = -1.2 if playerX >= 0 else 1.2
+                            opp['decisionTimer'] = 60 
+                            
+                        if 0 < distToPlayer < 200 and opp['speed'] > speed and abs(playerX - opp['x']) < 0.6:
                             opp['speed'] = speed 
+                            
+                    elif -400 < distToPlayer <= 0 and abs(playerX - opp['x']) < 0.9: 
+                        opp['targetX'] = 1.2 if opp['x'] >= playerX else -1.2
                     
                     oppDriftForce = 0.0
                     isOppTurning = False
@@ -486,7 +579,15 @@ class GameWindow:
                 
                 if self.raceState != 'COUNTDOWN':
                     if playerVisualZ < dzOpp < playerVisualZ + 400 and abs(playerX - opp['x']) < 0.50:
-                        speed *= 0.3
+
+                        if self.collisionCooldown == 0:
+                            self.collisionSound.play()
+                            self.collisionCooldown = 30
+
+                        if speed > opp['speed']:
+                            speed *= 0.3
+                        else:
+                            opp['speed'] *= 0.3
 
             speed = max(0, min(speed, currentMaxSpeed))
             absolutePos += speed
@@ -693,9 +794,11 @@ class GameWindow:
             # Quebra a tração se: Curva forte + volante no máximo (L ou R) + alta velocidade
             if absCurve > limite_curva_fechada and steerState in ['L', 'R'] and speed > 180:
                 is_drifting = True  
-            # Retoma a tração se: Curva acabou/ficou reta, velocidade caiu muito ou soltou o volante
+                if not self.skidChannel.get_busy():
+                    self.skidChannel.play(self.skidSound, loops=-1)
             elif absCurve < 1.0 or speed < 120 or steerState == 'S':
                 is_drifting = False 
+                self.skidChannel.stop()
                 
             # 2. Condições para a fumaça aparecer
             tempo_corrida = currentTick - self.countdownStartTick - 3000
@@ -805,9 +908,10 @@ class GameWindow:
             if self.raceState == 'FINISHED':
                 player_pos = self.final_position
             else:
-                distances = [absolutePos] + [o['totalZ'] for o in self.opponents]
+                playerRealZ = absolutePos + playerVisualZ
+                distances = [playerRealZ] + [o['totalZ'] for o in self.opponents]
                 distances.sort(reverse=True)
-                player_pos = distances.index(absolutePos) + 1
+                player_pos = distances.index(playerRealZ) + 1
                 
             sufixos = {1: "ST", 2: "ND", 3: "RD"}
             pos_suffix = sufixos.get(player_pos, "TH")
@@ -835,10 +939,26 @@ class GameWindow:
             if elapsed_start < 3500:
                 light_sprite = None
                 
-                if elapsed_start < 1000: light_sprite = self.startLights.get('3')
-                elif elapsed_start < 2000: light_sprite = self.startLights.get('2')
-                elif elapsed_start < 3000: light_sprite = self.startLights.get('1')
-                elif elapsed_start < 3500: light_sprite = self.startLights.get('GO')
+                if elapsed_start < 1000: 
+                    light_sprite = self.startLights.get('3')
+                    if not self.hasPlayedReady3:
+                        self.readySound.play()
+                        self.hasPlayedReady3 = True
+                elif elapsed_start < 2000: 
+                    light_sprite = self.startLights.get('2')
+                    if not self.hasPlayedReady2:
+                        self.readySound.play()
+                        self.hasPlayedReady2 = True
+                elif elapsed_start < 3000: 
+                    light_sprite = self.startLights.get('1')
+                    if not self.hasPlayedReady1:
+                        self.readySound.play()
+                        self.hasPlayedReady1 = True
+                elif elapsed_start < 3500: 
+                    light_sprite = self.startLights.get('GO')
+                    if not self.hasPlayedGo:
+                        self.goSound.play()
+                        self.hasPlayedGo = True
                     
                 if light_sprite:
                     light_rect = light_sprite.get_rect(center=(WINDOW_WIDTH // 2, 300))
