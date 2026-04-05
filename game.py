@@ -122,17 +122,12 @@ class GameWindow:
         except FileNotFoundError:
             print("Aviso: Imagens do semáforo (1, 2, 3, GO) não encontradas!")
 
-        # --- CARREGAR SPRITES DOS CARROS (TODOS OS MODELOS) ---
         self.carModels = ['288GTO', '959', 'Testarossa', 'XJR15']
-        self.playerModel = '959' # <--- Escolhe aqui o teu carro!
+        self.playerModel = '959' # Apenas um fallback, o menu vai sobrescrever depois
 
         self.allRawCarSprites = {}
-        self.carSprites = {}
-        
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
-        carTargetWidth = 300 
 
-        # 1. Carrega todos os 4 modelos na memória
         for model in self.carModels:
             basePath = os.path.join(diretorioAtual, "sprites", "cars", model)
             try:
@@ -147,34 +142,41 @@ class GameWindow:
                 print(f"Aviso: Sprites do carro {model} não encontrados!")
                 continue
 
-            # 2. Se for o carro do PLAYER, cria a versão já na escala certa (para uso na tela)
-            if model == self.playerModel:
-                imagemReta = self.allRawCarSprites[model]['S'][0]
-                fatorEscala = carTargetWidth / imagemReta.get_width()
-                for state, images in self.allRawCarSprites[model].items():
-                    self.carSprites[state] = []
-                    for img in images:
-                        nW = int(img.get_width() * fatorEscala)
-                        nH = int(img.get_height() * fatorEscala)
-                        self.carSprites[state].append(pygame.transform.scale(img, (nW, nH)))
+        self.set_player_car(self.playerModel)
 
-        # --- CARREGAR SPRITES DE FUMAÇA (SOMENTE DO PLAYER) ---
+    def set_player_car(self, model):
+        """Define o carro do jogador e redimensiona os sprites e efeitos correspondentes."""
+        self.playerModel = model
+        carTargetWidth = 300 
+        diretorioAtual = os.path.dirname(os.path.abspath(__file__))
+        
+        # 1. Pega a referência de tamanho do carro escolhido
+        imagemReta = self.allRawCarSprites[model]['S'][0]
+        fatorEscala = carTargetWidth / imagemReta.get_width()
+        
+        # 2. Escala todos os sprites de direção do carro
+        self.carSprites = {}
+        for state, images in self.allRawCarSprites[model].items():
+            self.carSprites[state] = []
+            for img in images:
+                nW = int(img.get_width() * fatorEscala)
+                nH = int(img.get_height() * fatorEscala)
+                self.carSprites[state].append(pygame.transform.scale(img, (nW, nH)))
+
+        # 3. Escala a fumaça de acordo com o carro
         self.smokeSprites = {'S': [], 'L': [], 'R': []}
         try:
-            img_referencia_carro = self.allRawCarSprites[self.playerModel]['S'][0]
-            escala_fumaca = carTargetWidth / img_referencia_carro.get_width()
-            basePathPlayer = os.path.join(diretorioAtual, "sprites", "cars", self.playerModel)
-
+            basePathPlayer = os.path.join(diretorioAtual, "sprites", "cars", model)
             for i in range(1, 4): 
                 imgS = pygame.image.load(os.path.join(basePathPlayer, 'effects', f'S{i}.png')).convert_alpha()
                 imgL = pygame.image.load(os.path.join(basePathPlayer, 'effects', f'L{i}.png')).convert_alpha()
                 imgR = pygame.image.load(os.path.join(basePathPlayer, 'effects', f'R{i}.png')).convert_alpha()
                 
-                self.smokeSprites['S'].append(pygame.transform.scale(imgS, (int(imgS.get_width() * escala_fumaca), int(imgS.get_height() * escala_fumaca))))
-                self.smokeSprites['L'].append(pygame.transform.scale(imgL, (int(imgL.get_width() * escala_fumaca), int(imgL.get_height() * escala_fumaca))))
-                self.smokeSprites['R'].append(pygame.transform.scale(imgR, (int(imgR.get_width() * escala_fumaca), int(imgR.get_height() * escala_fumaca))))
+                self.smokeSprites['S'].append(pygame.transform.scale(imgS, (int(imgS.get_width() * fatorEscala), int(imgS.get_height() * fatorEscala))))
+                self.smokeSprites['L'].append(pygame.transform.scale(imgL, (int(imgL.get_width() * fatorEscala), int(imgL.get_height() * fatorEscala))))
+                self.smokeSprites['R'].append(pygame.transform.scale(imgR, (int(imgR.get_width() * fatorEscala), int(imgR.get_height() * fatorEscala))))
         except FileNotFoundError:
-            print(f"Aviso: Efeitos de fumaça não encontrados para o modelo {self.playerModel}!")
+            print(f"Aviso: Efeitos de fumaça não encontrados para o modelo {model}!")
 
     def _loadBackground(self, path, scale=2):
         """Carrega o fundo de uma pista específica."""
@@ -202,45 +204,6 @@ class GameWindow:
         self.engineChannelHigh.set_volume(0.0)
         self.skidChannel.stop()
 
-    def trackSelect(self):
-        """Tela de seleção de pista."""
-        from tracks_data import get_all_tracks
-        tracks = get_all_tracks()
-        selected = 0
-
-        # Silencia o motor no menu
-        self._muteEngine()
-
-        while True:
-            self.windowSurface.fill((0, 0, 0))
-
-            self.draw_hud("TRACK SELECT", self.lapFont, (255, 255, 255), WINDOW_WIDTH // 2, 100, "center")
-
-            for i, track in enumerate(tracks):
-                color = (255, 255, 50) if i == selected else (150, 150, 150)
-                self.draw_hud(track['name'].upper(), self.hudFont, color, WINDOW_WIDTH // 2, 280 + i * 80, "center")
-                if i == selected:
-                    self.draw_hud(">", self.hudFont, (255, 255, 50), WINDOW_WIDTH // 2 - 140, 280 + i * 80, "left")
-
-            self.draw_hud("ENTER TO SELECT", self.hudFont, (100, 100, 100), WINDOW_WIDTH // 2, WINDOW_HEIGHT - 80, "center")
-
-            pygame.display.update()
-            self.clock.tick(30)
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP:
-                        selected = (selected - 1) % len(tracks)
-                    elif event.key == pygame.K_DOWN:
-                        selected = (selected + 1) % len(tracks)
-                    elif event.key == pygame.K_RETURN:
-                        return tracks[selected]['id']
-                    elif event.key == pygame.K_ESCAPE:
-                        pygame.quit()
-                        sys.exit()
 
     def _gerarPitchMotor(self, baseSound, steps=40, pitchMin=0.8, pitchMax=1.20):
         """
