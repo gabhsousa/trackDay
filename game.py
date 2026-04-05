@@ -48,7 +48,9 @@ class GameWindow:
         self.readySound = pygame.mixer.Sound("sfx/Ready.wav")
         self.goSound = pygame.mixer.Sound("sfx/Go.wav")
         self.skidSound = pygame.mixer.Sound("sfx/Skid.wav")
+        self.skidSound.set_volume(0.3)
         self.collisionSound = pygame.mixer.Sound("sfx/Collision.wav")
+        self.collisionSound.set_volume(0.4)
 
         som_motor_base = pygame.mixer.Sound("sfx/Engine.wav")
         versoesMotor = self._gerarPitchMotor(som_motor_base, steps=2, pitchMin=1.0, pitchMax=1.20)
@@ -58,6 +60,7 @@ class GameWindow:
         self.engineChannelLow = pygame.mixer.Channel(0)
         self.engineChannelHigh = pygame.mixer.Channel(2)
         self.skidChannel = pygame.mixer.Channel(1)
+        self.collisionChannel = pygame.mixer.Channel(3)
 
         # Ligar AMBOS os sons em loop infinito desde o início da app!
         self.engineChannelLow.play(som_motor_base, loops=-1)
@@ -344,7 +347,7 @@ class GameWindow:
             ratioVelocidade = max(0.0, min(speed / basePlayerMaxSpeed, 1.0))
             
             # Volume mestre do motor
-            masterVolume = 0.2
+            masterVolume = 0.1
             
             volumeLow = ((1.0 - ratioVelocidade) ** 0.5) * masterVolume
             volumeHigh = (ratioVelocidade ** 0.5) * masterVolume
@@ -539,6 +542,7 @@ class GameWindow:
                             
                     elif -400 < distToPlayer <= 0 and abs(playerX - opp['x']) < 0.9: 
                         opp['targetX'] = 1.2 if opp['x'] >= playerX else -1.2
+                        opp['decisionTimer'] = 60
                     
                     oppDriftForce = 0.0
                     isOppTurning = False
@@ -581,7 +585,7 @@ class GameWindow:
                     if playerVisualZ < dzOpp < playerVisualZ + 400 and abs(playerX - opp['x']) < 0.50:
 
                         if self.collisionCooldown == 0:
-                            self.collisionSound.play()
+                            self.collisionChannel.play(self.collisionSound)
                             self.collisionCooldown = 30
 
                         if speed > opp['speed']:
@@ -794,15 +798,18 @@ class GameWindow:
             # Quebra a tração se: Curva forte + volante no máximo (L ou R) + alta velocidade
             if absCurve > limite_curva_fechada and steerState in ['L', 'R'] and speed > 180:
                 is_drifting = True  
-                if not self.skidChannel.get_busy():
-                    self.skidChannel.play(self.skidSound, loops=-1)
             elif absCurve < 1.0 or speed < 120 or steerState == 'S':
                 is_drifting = False 
-                self.skidChannel.stop()
                 
             # 2. Condições para a fumaça aparecer
             tempo_corrida = currentTick - self.countdownStartTick - 3000
             is_patinando_largada = (self.raceState == 'RACING' and 0 <= tempo_corrida < 2000 and cmd_up)
+
+            if is_drifting or is_patinando_largada:
+                if not self.skidChannel.get_busy():
+                    self.skidChannel.play(self.skidSound, loops=-1)
+            else:
+                self.skidChannel.stop()
             
             # Esporádica: Só rola se a flag is_drifting estiver True e o volante minimamente virado
             is_fumaca_curva = (is_drifting and steerState in ['L', 'R', 'SL', 'SR'])
