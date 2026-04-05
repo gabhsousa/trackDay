@@ -15,7 +15,9 @@ class GameWindow:
     Classe principal que gere o estado do jogo, o loop principal, 
     a renderização e a lógica da Inteligência Artificial (IA).
     """
-    def __init__(self):
+    def __init__(self, dev_mode=False):
+        self.dev_mode = dev_mode
+        
         # Inicialização da janela principal do Pygame
         self.windowSurface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("TrackDay")
@@ -87,24 +89,7 @@ class GameWindow:
         self._loadAssets()
 
     def _loadAssets(self):
-        # --- CARREGAR FUNDO ---
-        try:
-            bgOriginal = pygame.image.load("sprites/bg/L1.png").convert_alpha()
-            escala = 6
-            novoW = bgOriginal.get_width() * escala
-            novoH = bgOriginal.get_height() * escala
-            self.backgroundImage = pygame.transform.scale(bgOriginal, (novoW, novoH))
-        except FileNotFoundError:
-            self.backgroundImage = pygame.Surface((WINDOW_WIDTH, 128), pygame.SRCALPHA)
-
-        self.bgWidth = self.backgroundImage.get_width()
-        bgHeight = self.backgroundImage.get_height()
-
-        self.backgroundSurface = pygame.Surface((self.bgWidth * 3, bgHeight), pygame.SRCALPHA)
-        self.backgroundSurface.blit(self.backgroundImage, (0, 0))
-        self.backgroundSurface.blit(self.backgroundImage, (self.bgWidth, 0))
-        self.backgroundSurface.blit(self.backgroundImage, (self.bgWidth * 2, 0))
-        self.backgroundRect = self.backgroundSurface.get_rect(topleft=(-self.bgWidth, 0))
+        # Background é carregado em _loadBackground (chamado no run)
         self.bgOffsetX = 0.0
 
         # --- CARREGAR SPRITES ESTÁTICOS DA PISTA E SEMÁFORO ---
@@ -191,6 +176,72 @@ class GameWindow:
         except FileNotFoundError:
             print(f"Aviso: Efeitos de fumaça não encontrados para o modelo {self.playerModel}!")
 
+    def _loadBackground(self, path, scale=2):
+        """Carrega o fundo de uma pista específica."""
+        try:
+            bgOriginal = pygame.image.load(path).convert_alpha()
+            novoW = bgOriginal.get_width() * scale
+            novoH = bgOriginal.get_height() * scale
+            self.backgroundImage = pygame.transform.scale(bgOriginal, (novoW, novoH))
+        except FileNotFoundError:
+            self.backgroundImage = pygame.Surface((WINDOW_WIDTH, 128), pygame.SRCALPHA)
+
+        self.bgWidth = self.backgroundImage.get_width()
+        bgHeight = self.backgroundImage.get_height()
+
+        self.backgroundSurface = pygame.Surface((self.bgWidth * 3, bgHeight), pygame.SRCALPHA)
+        self.backgroundSurface.blit(self.backgroundImage, (0, 0))
+        self.backgroundSurface.blit(self.backgroundImage, (self.bgWidth, 0))
+        self.backgroundSurface.blit(self.backgroundImage, (self.bgWidth * 2, 0))
+        self.backgroundRect = self.backgroundSurface.get_rect(topleft=(-self.bgWidth, 0))
+        self.bgOffsetX = 0.0
+
+    def _muteEngine(self):
+        """Silencia todos os canais de áudio do motor."""
+        self.engineChannelLow.set_volume(0.0)
+        self.engineChannelHigh.set_volume(0.0)
+        self.skidChannel.stop()
+
+    def trackSelect(self):
+        """Tela de seleção de pista."""
+        from tracks_data import get_all_tracks
+        tracks = get_all_tracks()
+        selected = 0
+
+        # Silencia o motor no menu
+        self._muteEngine()
+
+        while True:
+            self.windowSurface.fill((0, 0, 0))
+
+            self.draw_hud("TRACK SELECT", self.lapFont, (255, 255, 255), WINDOW_WIDTH // 2, 100, "center")
+
+            for i, track in enumerate(tracks):
+                color = (255, 255, 50) if i == selected else (150, 150, 150)
+                self.draw_hud(track['name'].upper(), self.hudFont, color, WINDOW_WIDTH // 2, 280 + i * 80, "center")
+                if i == selected:
+                    self.draw_hud(">", self.hudFont, (255, 255, 50), WINDOW_WIDTH // 2 - 140, 280 + i * 80, "left")
+
+            self.draw_hud("ENTER TO SELECT", self.hudFont, (100, 100, 100), WINDOW_WIDTH // 2, WINDOW_HEIGHT - 80, "center")
+
+            pygame.display.update()
+            self.clock.tick(30)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        selected = (selected - 1) % len(tracks)
+                    elif event.key == pygame.K_DOWN:
+                        selected = (selected + 1) % len(tracks)
+                    elif event.key == pygame.K_RETURN:
+                        return tracks[selected]['id']
+                    elif event.key == pygame.K_ESCAPE:
+                        pygame.quit()
+                        sys.exit()
+
     def _gerarPitchMotor(self, baseSound, steps=40, pitchMin=0.8, pitchMax=1.20):
         """
         Gera versões do som usando interpolação linear (suavização) 
@@ -253,8 +304,16 @@ class GameWindow:
 
         self.windowSurface.blit(surface_color, rect)
 
-    def run(self):
-        self.track.buildTrack()
+    def run(self, track_id='autodromo'):
+        from tracks_data import get_track
+        track_data = get_track(track_id)
+        
+        self.track.buildTrack(track_data)
+        self._loadBackground(track_data['background'], track_data.get('bg_scale', 6))
+        
+        self.sky_top = track_data['sky_top']
+        self.sky_bottom = track_data['sky_bottom']
+        
         lines = self.track.lines
         totalSegments = len(lines)
         trackLength = totalSegments * self.segmentLength
@@ -276,7 +335,7 @@ class GameWindow:
         playerVisualZ = 780 
         absolutePos = player_virtual_z - playerVisualZ 
         
-        maxLaps = 5  
+        maxLaps = 99999 if self.dev_mode else track_data.get('laps', 5)
         playerX = 1.1 # Nasce do lado direito da pista
         playerY = 1250
         playerPitchBase = 150
@@ -291,49 +350,52 @@ class GameWindow:
         turnTimer = 0
         is_drifting = False
 
-        # --- SORTEIO DA DISTRIBUIÇÃO DOS BOTS ---
-        bot_models_list = []
-        for model in self.carModels:
-            if model == self.playerModel:
-                bot_models_list.extend([model] * 3) # 2 iguais ao do player
-            else:
-                bot_models_list.extend([model] * 4) # 3 de cada um dos outros (3x3 = 9)
-                
-        random.shuffle(bot_models_list) # Mistura a urna!
-
-        self.raceState = 'COUNTDOWN' 
         self.countdownStartTick = pygame.time.get_ticks()
         self.finishStartTick = 0
         countdown_text = None
-
-        # --- INICIALIZAÇÃO DOS OPONENTES ---
         self.opponents = []
-        
-        slots_ocupados = 0
-        for i in range(15): # Cria o grid com 12 slots (0 a 11)
-            if i == posicao_jogador:
-                continue # O slot 11 é do player, pula a criação de bot aqui
+
+        if self.dev_mode:
+            # Dev mode: sem adversários, direto para corrida
+            self.raceState = 'RACING'
+        else:
+            self.raceState = 'COUNTDOWN'
+            
+            # --- SORTEIO DA DISTRIBUIÇÃO DOS BOTS ---
+            bot_models_list = []
+            for model in self.carModels:
+                if model == self.playerModel:
+                    bot_models_list.extend([model] * 3)
+                else:
+                    bot_models_list.extend([model] * 4)
+                    
+            random.shuffle(bot_models_list)
+
+            slots_ocupados = 0
+            for i in range(15):
+                if i == posicao_jogador:
+                    continue
+                    
+                baseSpeed = 258 + ((15 - i) * 0.5) 
                 
-            baseSpeed = 258 + ((15 - i) * 0.5) 
-            
-            fileira = i // 2 
-            start_z = primeira_fileira_z - (fileira * distancia_entre_fileiras)
-            pos_x = -1.1 if i % 2 == 0 else 1.1
-            
-            self.opponents.append({
-                'id': i,
-                'model': bot_models_list[slots_ocupados], # Atribui o carro sorteado
-                'z': start_z,
-                'totalZ': start_z, 
-                'x': pos_x,
-                'targetX': pos_x,
-                'speed': 0.0, 
-                'baseMaxSpeed': baseSpeed, 
-                'accel': 2.0 + ((15 - i) * 0.13), 
-                'decisionTimer': random.randint(0, 100),
-                'lateralDelta': 0.0
-            })
-            slots_ocupados += 1
+                fileira = i // 2 
+                start_z = primeira_fileira_z - (fileira * distancia_entre_fileiras)
+                pos_x = -1.1 if i % 2 == 0 else 1.1
+                
+                self.opponents.append({
+                    'id': i,
+                    'model': bot_models_list[slots_ocupados],
+                    'z': start_z,
+                    'totalZ': start_z, 
+                    'x': pos_x,
+                    'targetX': pos_x,
+                    'speed': 0.0, 
+                    'baseMaxSpeed': baseSpeed, 
+                    'accel': 2.0 + ((15 - i) * 0.13), 
+                    'decisionTimer': random.randint(0, 100),
+                    'lateralDelta': 0.0
+                })
+                slots_ocupados += 1
         # ==========================================
         # GAME LOOP PRINCIPAL
         # ==========================================
@@ -358,10 +420,13 @@ class GameWindow:
             self.engineChannelLow.set_volume(volumeLow)
             self.engineChannelHigh.set_volume(volumeHigh)
             
-            for event in pygame.event.get([pygame.QUIT]):
+            for event in pygame.event.get([pygame.QUIT, pygame.KEYDOWN]):
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self._muteEngine()
+                    return  # Volta para seleção de pista
 
             keys = pygame.key.get_pressed()
             
@@ -405,16 +470,41 @@ class GameWindow:
                     self.final_position = distances.index(playerRealZ) + 1
                     
             elif self.raceState == 'FINISHED':
-                # Inteligência Artificial pilota o carro do jogador
-                cmd_up = speed < 220
-                cmd_down = speed > 220
-                cmd_left = playerX > 0.1
-                cmd_right = playerX < -0.1
+                autoMaxSpeed = 220
                 
-                # Desliga após 5 segundos
+                cmd_up = speed < autoMaxSpeed
+                cmd_down = speed > autoMaxSpeed + 10
+                
+                autoCurve = rawCurve
+                autoAbsCurve = absCurve
+                
+                if autoAbsCurve > 1.0:
+                    autoTargetX = -0.8 if autoCurve > 0 else 0.8
+                else:
+                    autoTargetX = 0.0
+                
+                for opp in self.opponents:
+                    dz = opp['dz']
+                    if 0 < dz < 2000 and abs(playerX - opp['x']) < 1.2:
+                        autoTargetX = 1.2 if playerX >= opp['x'] else -1.2
+                        break
+                
+                autoCentrifugal = (autoAbsCurve ** 0.6) * 0.015 * (speed / max(maxSpeed, 1)) if autoAbsCurve > 0 else 0
+                dynamicSteer = max(0.04, autoCentrifugal + 0.015)
+                
+                if playerX < autoTargetX - 0.05:
+                    cmd_right = True
+                    cmd_left = False
+                elif playerX > autoTargetX + 0.05:
+                    cmd_left = True
+                    cmd_right = False
+                else:
+                    cmd_left = cmd_right = False
+                
+                # Volta ao menu após 5 segundos
                 if currentTick - self.finishStartTick > 5000:
-                    pygame.quit()
-                    sys.exit()
+                    self._muteEngine()
+                    return
 
             # --- SISTEMA DE VÁCUO (SLIPSTREAM) ---
             isDrafting = False
@@ -502,8 +592,8 @@ class GameWindow:
                     if distFromPlayer > trackLength / 2: distFromPlayer -= trackLength
                     elif distFromPlayer < -trackLength / 2: distFromPlayer += trackLength
                     
-                    if distFromPlayer < -6000: opp['maxSpeed'] = opp['baseMaxSpeed'] + 5
-                    elif distFromPlayer > 1500: opp['maxSpeed'] = opp['baseMaxSpeed'] - 3
+                    if distFromPlayer < -6000: opp['maxSpeed'] = opp['baseMaxSpeed'] + 3
+                    elif distFromPlayer > 1000: opp['maxSpeed'] = opp['baseMaxSpeed'] - 5
                     else: opp['maxSpeed'] = opp['baseMaxSpeed']
 
                     if opp['speed'] < opp['maxSpeed']: opp['speed'] += opp.get('accel', 2.5)
@@ -581,7 +671,7 @@ class GameWindow:
                 if dzOpp < 0: dzOpp += trackLength 
                 opp['dz'] = dzOpp 
                 
-                if self.raceState != 'COUNTDOWN':
+                if self.raceState == 'RACING':
                     if playerVisualZ < dzOpp < playerVisualZ + 400 and abs(playerX - opp['x']) < 0.50:
 
                         if self.collisionCooldown == 0:
@@ -622,7 +712,7 @@ class GameWindow:
             else:
                 farY = WINDOW_HEIGHT / 2
             
-            drawStripedSky(self.windowSurface, SKY_COLOR_TOP, SKY_COLOR_BOTTOM, SKY_BAND_HEIGHT, farY)
+            drawStripedSky(self.windowSurface, self.sky_top, self.sky_bottom, SKY_BAND_HEIGHT, farY)
             self.backgroundRect.bottom = int(farY) + 1 
             self.windowSurface.blit(self.backgroundSurface, self.backgroundRect)
 
@@ -907,73 +997,78 @@ class GameWindow:
 
             bottom_y = WINDOW_HEIGHT - 60
             
-            # Voltas (Inferior Esquerdo)
-            displayLap = min(currentLap, maxLaps)
-            self.draw_hud(f"LAP {displayLap}/{maxLaps}", self.lapFont, (255, 255, 255), 30, bottom_y, "left")
-            
-            # Posição (Inferior Direito)
-            if self.raceState == 'FINISHED':
-                player_pos = self.final_position
+            if self.dev_mode:
+                # Dev mode: mostra nome da pista
+                self.draw_hud("FREE DRIVE", self.lapFont, (255, 255, 50), 30, bottom_y, "left")
+                self.draw_hud(track_data['name'].upper(), self.hudFont, (180, 180, 180), WINDOW_WIDTH - 30, bottom_y + 5, "right")
             else:
-                playerRealZ = absolutePos + playerVisualZ
-                distances = [playerRealZ] + [o['totalZ'] for o in self.opponents]
-                distances.sort(reverse=True)
-                player_pos = distances.index(playerRealZ) + 1
+                # Voltas (Inferior Esquerdo)
+                displayLap = min(currentLap, maxLaps)
+                self.draw_hud(f"LAP {displayLap}/{maxLaps}", self.lapFont, (255, 255, 255), 30, bottom_y, "left")
                 
-            sufixos = {1: "ST", 2: "ND", 3: "RD"}
-            pos_suffix = sufixos.get(player_pos, "TH")
-            self.draw_hud(f"{player_pos}{pos_suffix}", self.lapFont, (255, 255, 255), WINDOW_WIDTH - 30, bottom_y, "right")
-
-            # --- GATILHO DE ULTRAPASSAGEM ---
-            if last_player_pos is None:
-                last_player_pos = player_pos
-            elif player_pos != last_player_pos:
-                center_msg = f"{player_pos}{pos_suffix}"
-                center_msg_timer = 120
-                last_player_pos = player_pos
-                
-            if center_msg_timer > 0:
-                if self.raceState == 'RACING':
-                    if (center_msg_timer // 10) % 2 == 0:
-                        self.draw_hud(center_msg, self.lapFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 120, "center")
-                
-                center_msg_timer -= 1
-
-# 4. Mensagens Centrais / Semáforo de Largada
-            elapsed_start = currentTick - self.countdownStartTick
-            
-            # Exibe a sequência de luzes até 3500ms (meio segundo após o GO)
-            if elapsed_start < 3500:
-                light_sprite = None
-                
-                if elapsed_start < 1000: 
-                    light_sprite = self.startLights.get('3')
-                    if not self.hasPlayedReady3:
-                        self.readySound.play()
-                        self.hasPlayedReady3 = True
-                elif elapsed_start < 2000: 
-                    light_sprite = self.startLights.get('2')
-                    if not self.hasPlayedReady2:
-                        self.readySound.play()
-                        self.hasPlayedReady2 = True
-                elif elapsed_start < 3000: 
-                    light_sprite = self.startLights.get('1')
-                    if not self.hasPlayedReady1:
-                        self.readySound.play()
-                        self.hasPlayedReady1 = True
-                elif elapsed_start < 3500: 
-                    light_sprite = self.startLights.get('GO')
-                    if not self.hasPlayedGo:
-                        self.goSound.play()
-                        self.hasPlayedGo = True
+                # Posição (Inferior Direito)
+                if self.raceState == 'FINISHED':
+                    player_pos = self.final_position
+                else:
+                    playerRealZ = absolutePos + playerVisualZ
+                    distances = [playerRealZ] + [o['totalZ'] for o in self.opponents]
+                    distances.sort(reverse=True)
+                    player_pos = distances.index(playerRealZ) + 1
                     
-                if light_sprite:
-                    light_rect = light_sprite.get_rect(center=(WINDOW_WIDTH // 2, 300))
-                    self.windowSurface.blit(light_sprite, light_rect)
+                sufixos = {1: "ST", 2: "ND", 3: "RD"}
+                pos_suffix = sufixos.get(player_pos, "TH")
+                self.draw_hud(f"{player_pos}{pos_suffix}", self.lapFont, (255, 255, 255), WINDOW_WIDTH - 30, bottom_y, "right")
 
-            if self.raceState == 'FINISHED':
-                if (currentTick // 500) % 2 == 0:
-                    self.draw_hud("FINISH!", self.finishFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
+            if not self.dev_mode:
+                # --- GATILHO DE ULTRAPASSAGEM ---
+                if last_player_pos is None:
+                    last_player_pos = player_pos
+                elif player_pos != last_player_pos:
+                    center_msg = f"{player_pos}{pos_suffix}"
+                    center_msg_timer = 120
+                    last_player_pos = player_pos
+                    
+                if center_msg_timer > 0:
+                    if self.raceState == 'RACING':
+                        if (center_msg_timer // 10) % 2 == 0:
+                            self.draw_hud(center_msg, self.lapFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 120, "center")
+                    
+                    center_msg_timer -= 1
+
+                # Mensagens Centrais / Semáforo de Largada
+                elapsed_start = currentTick - self.countdownStartTick
+                
+                if elapsed_start < 3500:
+                    light_sprite = None
+                    
+                    if elapsed_start < 1000: 
+                        light_sprite = self.startLights.get('3')
+                        if not self.hasPlayedReady3:
+                            self.readySound.play()
+                            self.hasPlayedReady3 = True
+                    elif elapsed_start < 2000: 
+                        light_sprite = self.startLights.get('2')
+                        if not self.hasPlayedReady2:
+                            self.readySound.play()
+                            self.hasPlayedReady2 = True
+                    elif elapsed_start < 3000: 
+                        light_sprite = self.startLights.get('1')
+                        if not self.hasPlayedReady1:
+                            self.readySound.play()
+                            self.hasPlayedReady1 = True
+                    elif elapsed_start < 3500: 
+                        light_sprite = self.startLights.get('GO')
+                        if not self.hasPlayedGo:
+                            self.goSound.play()
+                            self.hasPlayedGo = True
+                        
+                    if light_sprite:
+                        light_rect = light_sprite.get_rect(center=(WINDOW_WIDTH // 2, 300))
+                        self.windowSurface.blit(light_sprite, light_rect)
+
+                if self.raceState == 'FINISHED':
+                    if (currentTick // 500) % 2 == 0:
+                        self.draw_hud("FINISH!", self.finishFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
 
             pygame.display.update()
             self.clock.tick(60)

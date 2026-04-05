@@ -3,6 +3,7 @@ from typing import List
 from config import *
 from utils import easeInOut
 
+
 class Line:
     def __init__(self, index):
         self.i = index
@@ -37,6 +38,14 @@ class Track:
     def __init__(self, segmentLength: int):
         self.lines: List[Line] = []
         self.segmentLength = segmentLength
+        
+        # Cores da pista (podem ser sobrescritas por track_data)
+        self.dark_grass = DARK_GRASS
+        self.light_grass = LIGHT_GRASS
+        self.white_rumble = WHITE_RUMBLE
+        self.black_rumble = BLACK_RUMBLE
+        self.dark_road = DARK_ROAD
+        self.light_road = LIGHT_ROAD
 
     def addSegment(self, curve: float, y: float):
         n = len(self.lines)
@@ -44,9 +53,9 @@ class Track:
         line.z = n * self.segmentLength + 0.00001
         line.curve = curve
         line.y = y
-        line.grassColor = LIGHT_GRASS if (n // 3) % 2 else DARK_GRASS
-        line.rumbleColor = WHITE_RUMBLE if (n // 3) % 2 else BLACK_RUMBLE
-        line.roadColor = LIGHT_ROAD if (n // 3) % 2 else DARK_ROAD
+        line.grassColor = self.light_grass if (n // 3) % 2 else self.dark_grass
+        line.rumbleColor = self.white_rumble if (n // 3) % 2 else self.black_rumble
+        line.roadColor = self.light_road if (n // 3) % 2 else self.dark_road
         self.lines.append(line)
 
     def addRoad(self, enter: int, hold: int, leave: int, curve: float, y: float):
@@ -87,42 +96,44 @@ class Track:
                     self.lines[i].sprite = sign_type
                     self.lines[i].spriteX = sign_x
 
-    def buildTrack(self):
+    def buildTrack(self, track_data: dict = None):
+        """Constrói a pista a partir dos dados fornecidos."""
         self.lines = []
-        self.addRoad(enter=0, hold=100, leave=0, curve=0.0, y=0.0)
+        
+        if track_data is None:
+            # Fallback: importa e usa a primeira pista
+            from tracks_data import get_track
+            track_data = get_track('autodromo')
+        
+        # Aplica cores da pista
+        colors = track_data.get('colors', {})
+        if colors:
+            self.dark_grass = pygame.Color(*colors['dark_grass'])
+            self.light_grass = pygame.Color(*colors['light_grass'])
+            self.dark_road = pygame.Color(*colors['dark_road'])
+            self.light_road = pygame.Color(*colors['light_road'])
+            self.white_rumble = pygame.Color(*colors['white_rumble'])
+            self.black_rumble = pygame.Color(*colors['black_rumble'])
+        
+        # Constrói o layout da pista
+        for road in track_data['layout']:
+            enter, hold, leave, curve, y = road
+            self.addRoad(enter, hold, leave, curve, y)
         
         # --- LINHA DE LARGADA ---
-        linha_idx = 25 
-        self.lines[linha_idx].sprite = 'START'
-        self.lines[linha_idx].spriteX = -1.8
+        start_seg = track_data.get('start_segment', 25)
+        if start_seg < len(self.lines):
+            self.lines[start_seg].sprite = 'START'
+            self.lines[start_seg].spriteX = -1.8
+            for i in range(start_seg, min(start_seg + 2, len(self.lines))):
+                self.lines[i].roadColor = pygame.Color(255, 255, 255)
+        
+        # --- PLACAS E SPONSORS ---
+        sponsors = track_data.get('sponsors', ['PIRELLI'])
+        self._placeSponsors(sponsors)
 
-        for i in range(linha_idx, linha_idx + 2):
-            self.lines[i].roadColor = pygame.Color(255, 255, 255)
-        self.addRoad(enter=0, hold=100, leave=0, curve=0.0, y=0.0)
-        self.addRoad(enter=40, hold=10, leave=5, curve=-15.0, y=-2500.0)
-        self.addRoad(enter=5, hold=40, leave=10, curve=15.0, y=-5000.0)
-        self.addRoad(enter=60, hold=80, leave=45, curve=-3.0, y=-5500.0)
-        self.addRoad(enter=0, hold=200, leave=0, curve=0.0, y=-5500.0)
-        self.addRoad(enter=40, hold=40, leave=20, curve=-10.0, y=-6000.0)
-        self.addRoad(enter=30, hold=40, leave=0, curve=0.0, y=-7000.0)
-        self.addRoad(enter=50, hold=40, leave=10, curve=-6.0, y=-7000.0)
-        self.addRoad(enter=30, hold=100, leave=0, curve=0.0, y=-4500.0)
-        self.addRoad(enter=0, hold=70, leave=20, curve=5.0, y=-2500.0)
-        self.addRoad(enter=10, hold=30, leave=30, curve=15.0, y=-4500.0)
-        self.addRoad(enter=20, hold=50, leave=20, curve=-25.0, y=-5000.0)
-        self.addRoad(enter=30, hold=80, leave=5, curve=0.0, y=-3000.0)
-        self.addRoad(enter=5, hold=50, leave=35, curve=10.0, y=-2500.0)
-        self.addRoad(enter=0, hold=40, leave=15, curve=12.0, y=-3500.0)
-        self.addRoad(enter=20, hold=70, leave=40, curve=-6.0, y=-6500.0)
-        self.addRoad(enter=25, hold=100, leave=5, curve=0.0, y=-4000.0)
-        self.addRoad(enter=5, hold=40, leave=20, curve=-14.0, y=-2500.0)
-        self.addRoad(enter=20, hold=80, leave=20, curve=-0.0, y=-2000.0)
-        self.addRoad(enter=20, hold=100, leave=20, curve=-1.0, y=-1000.0)
-        self.addRoad(enter=20, hold=150, leave=20, curve=-1.0, y=-500.0)
-        self.addRoad(enter=30, hold=100, leave=30, curve=0.0, y=0.0)
-
-
-        sponsors = ['HEUER', 'LONGHI', 'MARELLI', 'MARLBORO', 'PIRELLI', 'SHELL']
+    def _placeSponsors(self, sponsors):
+        """Distribui placas de patrocínio e pneus ao longo da pista."""
         sponsor_idx = 0
         
         for i in range(40, len(self.lines)):
