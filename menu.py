@@ -2,7 +2,6 @@ import pygame
 import sys
 from config import WINDOW_WIDTH, WINDOW_HEIGHT
 
-# Função auxiliar para textos (mantida para compatibilidade)
 def draw_menu_text(surface, text, font, color, x, y, align="left"):
     surface_color = font.render(text, True, color)
     surface_outline = font.render(text, True, (0, 0, 0)) 
@@ -54,10 +53,10 @@ class StartMenu:
         while running:
             dt = self.clock.tick(60)
             if self.fading_in:
-                self.fade_alpha -= (255/3000) * dt # Fade in de 3s
+                self.fade_alpha -= (255/3000) * dt
                 if self.fade_alpha <= 0: self.fade_alpha = 0; self.fading_in = False
             elif self.fading_out:
-                self.fade_alpha += (255/1000) * dt # Fade out de 1s
+                self.fade_alpha += (255/1000) * dt
                 if self.fade_alpha >= 255: self.fade_alpha = 255; running = False
 
             self.blink_timer += dt
@@ -183,13 +182,11 @@ class LoreMenu:
         char_idx = 0; timer = 0; finished = False; alpha = 255; f_out = False
         fade_surf = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT)); fade_surf.fill((0,0,0))
 
-        # 1. Limpa o tempo acumulado de carregamento da imagem antes do loop!
         self.clock.tick() 
 
         while True:
             dt = self.clock.tick(60)
             
-            # 2. Trava de segurança: se o PC engasgar, o dt não passa de 50ms
             if dt > 50: dt = 50 
             
             if not f_out:

@@ -1,15 +1,12 @@
 import pygame
 
-# Configurações de Tela
 WINDOW_WIDTH = 1024
 WINDOW_HEIGHT = 768
 
-# Configurações do Céu
 SKY_COLOR_TOP = (0, 60, 150)  
 SKY_COLOR_BOTTOM = (40, 180, 250)
 SKY_BAND_HEIGHT = 24
 
-# Cores da Pista e Grama
 DARK_GRASS = pygame.Color(0, 120, 0)
 LIGHT_GRASS = pygame.Color(0, 150, 0)
 WHITE_RUMBLE = pygame.Color(255, 255, 255)

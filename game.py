@@ -3,7 +3,6 @@ import sys
 import os
 import random
 
-# Importações dos outros módulos
 from config import *
 from utils import drawQuad, drawStripedSky
 from track import Track
@@ -11,41 +10,34 @@ from track import Track
 import numpy as np
 
 class GameWindow:
-    """
-    Classe principal que gere o estado do jogo, o loop principal, 
-    a renderização e a lógica da Inteligência Artificial (IA).
-    """
     def __init__(self, dev_mode=False):
         self.dev_mode = dev_mode
         
-        # Inicialização da janela principal do Pygame
         self.windowSurface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("TrackDay")
         self.clock = pygame.time.Clock()
         
-        # Configuração das fontes para o HUD
         pygame.font.init()
         try:
             self.hudFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 20)
             self.lapFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 30)
-            self.finishFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 50) # Adicione esta linha!
+            self.finishFont = pygame.font.Font('fonts/PressStart2P-Regular.ttf', 50)
         except FileNotFoundError:
             print("Aviso: Fonte 8-bit não encontrada. Usando fonte padrão.")
             self.hudFont = pygame.font.SysFont('Courier New', 24, bold=True)
             self.lapFont = pygame.font.SysFont('Courier New', 34, bold=True)
-            self.finishFont = pygame.font.SysFont('Courier New', 54, bold=True) # Adicione esta linha!
+            self.finishFont = pygame.font.SysFont('Courier New', 54, bold=True)
 
-        self.digiGreen = (50, 255, 50)  # Verde normal
-        self.digiGreenDark = (0, 40, 0) # Fundo do verde
-        self.digiBlue = (50, 150, 255)  # Azul com vácuo
-        self.digiBlueDark = (0, 20, 40) # Fundo do azul
+        self.digiGreen = (50, 255, 50)
+        self.digiGreenDark = (0, 40, 0)
+        self.digiBlue = (50, 150, 255)
+        self.digiBlueDark = (0, 20, 40)
 
         try:
             self.speedFont = pygame.font.Font('fonts/dseg7-classic-latin-700-italic.ttf', 80)
         except FileNotFoundError:
             self.speedFont = pygame.font.SysFont('Courier New', 80, bold=True, italic=True)
 
-        # --- NOVO: SISTEMA DE ÁUDIO ---
         pygame.mixer.init()
         self.readySound = pygame.mixer.Sound("sfx/Ready.wav")
         self.goSound = pygame.mixer.Sound("sfx/Go.wav")
@@ -58,17 +50,14 @@ class GameWindow:
         versoesMotor = self._gerarPitchMotor(som_motor_base, steps=2, pitchMin=1.0, pitchMax=1.20)
         som_motor_agudo = versoesMotor[1]
 
-        # Canais exclusivos
         self.engineChannelLow = pygame.mixer.Channel(0)
         self.engineChannelHigh = pygame.mixer.Channel(2)
         self.skidChannel = pygame.mixer.Channel(1)
         self.collisionChannel = pygame.mixer.Channel(3)
 
-        # Ligar AMBOS os sons em loop infinito desde o início da app!
         self.engineChannelLow.play(som_motor_base, loops=-1)
         self.engineChannelHigh.play(som_motor_agudo, loops=-1)
         
-        # Volume a zero por enquanto (para não fazer barulho no ecrã de loading)
         self.engineChannelLow.set_volume(0.0)
         self.engineChannelHigh.set_volume(0.0)
 
@@ -79,7 +68,6 @@ class GameWindow:
         self.hasPlayedReady1 = False
         self.hasPlayedGo = False
 
-        # Configurações do motor de renderização pseudo-3D
         self.roadWidth = 2000
         self.segmentLength = 200
         self.cameraDepth = 0.84
@@ -89,18 +77,12 @@ class GameWindow:
         self._loadAssets()
 
     def _loadAssets(self):
-        # Background é carregado em _loadBackground (chamado no run)
-        self.bgOffsetX = 0.0
-
-        # --- CARREGAR SPRITES ESTÁTICOS DA PISTA E SEMÁFORO ---
         self.trackSprites = {}
         try:
-            # Placas de direção e Pórtico
             self.trackSprites['PD'] = pygame.image.load("sprites/track/PD.png").convert_alpha()
             self.trackSprites['PE'] = pygame.image.load("sprites/track/PE.png").convert_alpha()
             self.trackSprites['START'] = pygame.image.load("sprites/track/start.png").convert_alpha()
             
-            # Outdoors de Patrocínio
             self.trackSprites['HEUER'] = pygame.image.load("sprites/track/sponsors/heuer.png").convert_alpha()
             self.trackSprites['LONGHI'] = pygame.image.load("sprites/track/sponsors/longhi.png").convert_alpha()
             self.trackSprites['MARELLI'] = pygame.image.load("sprites/track/sponsors/marelli.png").convert_alpha()
@@ -123,7 +105,7 @@ class GameWindow:
             print("Aviso: Imagens do semáforo (1, 2, 3, GO) não encontradas!")
 
         self.carModels = ['288GTO', '959', 'Testarossa', 'XJR15']
-        self.playerModel = '959' # Apenas um fallback, o menu vai sobrescrever depois
+        self.playerModel = '959'
 
         self.allRawCarSprites = {}
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
@@ -150,11 +132,9 @@ class GameWindow:
         carTargetWidth = 300 
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
         
-        # 1. Pega a referência de tamanho do carro escolhido
         imagemReta = self.allRawCarSprites[model]['S'][0]
         fatorEscala = carTargetWidth / imagemReta.get_width()
         
-        # 2. Escala todos os sprites de direção do carro
         self.carSprites = {}
         for state, images in self.allRawCarSprites[model].items():
             self.carSprites[state] = []
@@ -163,7 +143,6 @@ class GameWindow:
                 nH = int(img.get_height() * fatorEscala)
                 self.carSprites[state].append(pygame.transform.scale(img, (nW, nH)))
 
-        # 3. Escala a fumaça de acordo com o carro
         self.smokeSprites = {'S': [], 'L': [], 'R': []}
         try:
             basePathPlayer = os.path.join(diretorioAtual, "sprites", "cars", model)
@@ -219,22 +198,18 @@ class GameWindow:
         generatedSounds = []
         pitches = np.linspace(pitchMin, pitchMax, steps)
         
-        # Eixo de tempo original
         tOld = np.arange(len(audioArray))
 
         for pitch in pitches:
-            # Novo eixo de tempo ajustado pela velocidade da marcha
             tNew = np.arange(0, len(audioArray) - 1, pitch)
             
-            # Aplica a interpolação linear para suavizar a onda
-            if len(audioArray.shape) == 2: # Áudio Estéreo
+            if len(audioArray.shape) == 2:
                 newArray = np.zeros((len(tNew), 2), dtype=np.float32)
                 newArray[:, 0] = np.interp(tNew, tOld, audioArray[:, 0])
                 newArray[:, 1] = np.interp(tNew, tOld, audioArray[:, 1])
-            else: # Áudio Mono
+            else:
                 newArray = np.interp(tNew, tOld, audioArray).astype(np.float32)
 
-            # Converte de volta para o formato original do Pygame (16-bit) e garante alinhamento de memória
             newArray = newArray.astype(audioArray.dtype)
             newArray = np.ascontiguousarray(newArray)
             
@@ -243,13 +218,11 @@ class GameWindow:
         return generatedSounds
 
     def draw_hud(self, text, font, color, x, y, align="left"):
-        """Função auxiliar para desenhar o texto com traçado preto (outline)"""
         surface_color = font.render(text, True, color)
         surface_outline = font.render(text, True, (0, 0, 0)) 
         
         rect = surface_color.get_rect()
         
-        # Alinhamento
         if align == "left":
             rect.x = x
         elif align == "right":
@@ -285,12 +258,10 @@ class GameWindow:
         center_msg = ""
         center_msg_timer = 0
 
-        # --- CONFIGURAÇÃO DO GRID DE LARGADA ---
         linha_largada_z = 25 * self.segmentLength 
         primeira_fileira_z = linha_largada_z - (14 * self.segmentLength) 
         distancia_entre_fileiras = 2000
 
-        # Jogador ocupa a vaga 11 (A última vaga de um grid de 0 a 11, ou seja, 6ª fileira)
         posicao_jogador = 16
         fileira_jogador = posicao_jogador // 2
         
@@ -299,7 +270,7 @@ class GameWindow:
         absolutePos = player_virtual_z - playerVisualZ 
         
         maxLaps = 99999 if self.dev_mode else track_data.get('laps', 5)
-        playerX = 1.1 # Nasce do lado direito da pista
+        playerX = 1.1
         playerY = 1250
         playerPitchBase = 150
         smoothPitch = 0.0
@@ -315,16 +286,13 @@ class GameWindow:
 
         self.countdownStartTick = pygame.time.get_ticks()
         self.finishStartTick = 0
-        countdown_text = None
         self.opponents = []
 
         if self.dev_mode:
-            # Dev mode: sem adversários, direto para corrida
             self.raceState = 'RACING'
         else:
             self.raceState = 'COUNTDOWN'
             
-            # --- SORTEIO DA DISTRIBUIÇÃO DOS BOTS ---
             bot_models_list = []
             for model in self.carModels:
                 if model == self.playerModel:
@@ -367,19 +335,14 @@ class GameWindow:
         is_aborting = False
 
         self.clock.tick()
-        # ==========================================
-        # GAME LOOP PRINCIPAL
-        # ==========================================
         while True:
             currentTick = pygame.time.get_ticks()
 
             if self.collisionCooldown > 0:
                 self.collisionCooldown -= 1
             
-            # --- ÁUDIO DO MOTOR (BLENDING DE POTÊNCIA CONSTANTE) ---
             ratioVelocidade = max(0.0, min(speed / basePlayerMaxSpeed, 1.0))
             
-            # Volume mestre do motor
             masterVolume = 0.2
             
             volumeLow = ((1.0 - ratioVelocidade) ** 0.5) * masterVolume
@@ -400,13 +363,11 @@ class GameWindow:
 
             keys = pygame.key.get_pressed()
             
-            # Variáveis de comando que podemos manipular na Largada e no Autopilot
             cmd_up = keys[pygame.K_UP]
             cmd_down = keys[pygame.K_DOWN]
             cmd_left = keys[pygame.K_LEFT]
             cmd_right = keys[pygame.K_RIGHT]
             
-            # Descobre em que parte do circuito o jogador está
             pos = absolutePos % trackLength 
             currentLap = int(absolutePos // trackLength) + 1
             if currentLap > last_lap and currentLap <= maxLaps:
@@ -419,13 +380,10 @@ class GameWindow:
             rawCurve = startSegment.curve
             absCurve = abs(rawCurve)
             
-            # --- GESTÃO DE ESTADOS (LARGADA E FINAL) ---
             if self.raceState == 'COUNTDOWN':
-                # Bloqueia os controles do jogador e dos bots
                 cmd_up = cmd_down = cmd_left = cmd_right = False
                 
                 elapsed = currentTick - self.countdownStartTick
-                # Exatamente aos 3 segundos (3000ms), a corrida começa!
                 if elapsed >= 3000: 
                     self.raceState = 'RACING'
                     
@@ -460,8 +418,7 @@ class GameWindow:
                         break
                 
                 autoCentrifugal = (autoAbsCurve ** 0.6) * 0.015 * (speed / max(maxSpeed, 1)) if autoAbsCurve > 0 else 0
-                dynamicSteer = max(0.04, autoCentrifugal + 0.015)
-                
+
                 if playerX < autoTargetX - 0.05:
                     cmd_right = True
                     cmd_left = False
@@ -471,7 +428,6 @@ class GameWindow:
                 else:
                     cmd_left = cmd_right = False
                 
-                # Volta ao menu após 5 segundos
                 if currentTick - self.finishStartTick > 5000:
                     self._muteEngine()
 
@@ -481,9 +437,7 @@ class GameWindow:
                         'time': max(0, final_time)
                     }
 
-            # --- SISTEMA DE VÁCUO (SLIPSTREAM) ---
             isDrafting = False
-            playerVisualZ = 780
             playerVirtualZ = pos + playerVisualZ 
 
             if absCurve <= 2.0 and speed >= 240:
@@ -498,21 +452,17 @@ class GameWindow:
             else: draftBonus = max(0.0, draftBonus - 0.05)
             maxSpeed = basePlayerMaxSpeed + draftBonus
 
-            # --- FÍSICA: FORÇA CENTRÍFUGA ---
             trackDriftForce = (absCurve ** 0.6) * 0.015
             currentCentrifugal = trackDriftForce * (speed / maxSpeed)
 
             isOffroad = abs(playerX) > 2.3
             currentMaxSpeed = maxSpeed * 0.4 if isOffroad else maxSpeed
 
-            # CÁLCULO DE TRAÇÃO (Efeito "Patinar" na Largada)
             accel_power = 3.0
             if self.raceState == 'RACING':
                 tempo_de_corrida = currentTick - self.countdownStartTick - 3000
                 
-                # Nos primeiros 1.5 segundos (1500ms) de corrida, o pneu do jogador patina
                 if 0 <= tempo_de_corrida < 2000: 
-                    # Aceleração cai drasticamente para 0.5 e vai subindo devagar até o pneu "pegar" aderência (3.0)
                     accel_power = 0.2 + (tempo_de_corrida / 2000.0) * 2.5
             
             if cmd_up: speed += accel_power
@@ -555,9 +505,6 @@ class GameWindow:
 
             playerX = max(-5.0, min(playerX, 5.0))
             
-            # ==========================================
-            # INTELIGÊNCIA ARTIFICIAL (BOTS)
-            # ==========================================
             for opp in self.opponents:
                 if self.raceState == 'COUNTDOWN':
                     opp['speed'] = 0
@@ -664,7 +611,6 @@ class GameWindow:
 
             self.opponents.sort(key=lambda o: o['dz'], reverse=True)
 
-            # Câmera
             lookahead = 3
             segmentoFrente = (startPos + lookahead) % totalSegments
             dy = lines[segmentoFrente].y - lines[startPos].y
@@ -695,7 +641,6 @@ class GameWindow:
             dx = 0.0  
             playerXWorld = playerX * 1000
 
-            # --- RENDERIZAÇÃO DA PISTA ---
             for n in range(startPos, startPos + self.showSegments):
                 currentLine = lines[n % totalSegments]
                 currentLine.project(playerXWorld - worldX, camHeight, pos - (totalSegments * self.segmentLength if n >= totalSegments else 0), smoothPitch, self.cameraDepth, self.roadWidth)
@@ -712,44 +657,34 @@ class GameWindow:
                 drawQuad(self.windowSurface, currentLine.rumbleColor, prevLine.X, prevLine.Y, prevLine.W * 1.2, currentLine.X, currentLine.Y, currentLine.W * 1.2)
                 drawQuad(self.windowSurface, currentLine.roadColor, prevLine.X, prevLine.Y, prevLine.W, currentLine.X, currentLine.Y, currentLine.W)
 
-            # --- COLETAR TODOS OS OBJETOS PARA RENDERIZAR ---
             renderables = []
             
-            # 1. Coletar Placas
             for n in range(startPos, startPos + self.showSegments):
                 line = lines[n % totalSegments]
                 if line.sprite and line.Y < WINDOW_HEIGHT:
-                    # Distância aproximada deste segmento até a câmera
                     dz = line.z - pos
                     if dz < 0: dz += trackLength
                     renderables.append({'type': 'sign', 'dz': dz, 'line': line})
 
-            # 2. Coletar Oponentes
             for opp in self.opponents:
                 dz = opp['dz']
                 if 0 < dz < (self.showSegments - 2) * self.segmentLength:
                     renderables.append({'type': 'opp', 'dz': dz, 'opp': opp})
 
-            # Ordenar tudo do mais distante (maior 'dz') para o mais próximo (menor 'dz')
             renderables.sort(key=lambda x: x['dz'], reverse=True)
 
-            # --- RENDERIZAR NA ORDEM CORRETA ---
             for obj in renderables:
                 
-                # --- DESENHAR PLACAS ---
                 if obj['type'] == 'sign':
                     line = obj['line']
                     sprite_img = self.trackSprites.get(line.sprite)
                     
                     if sprite_img and line.scale > 0:
                         
-                        # 1. Pórtico de Largada (Gigante)
                         if line.sprite == 'START':
                             targetSignW = line.W * 1.5
-                        # 2. Placas de Curva (Pequenas)
                         elif line.sprite in ['PD', 'PE']:
                             targetSignW = line.W * 0.25
-                        # 3. Outdoors de Patrocínio (Grandes)
                         elif line.sprite == 'TYRE':
                             targetSignW = line.W * 0.175
                         else:
@@ -763,7 +698,6 @@ class GameWindow:
                         if finalW > 0 and finalH > 0:
                             destX = line.X + (line.spriteX * line.W)
                             
-                            # O START prende no canto, o resto (Curvas e Outdoors) é centralizado no poste
                             if line.sprite == 'START':
                                 renderX = destX
                             else:
@@ -785,7 +719,6 @@ class GameWindow:
                                 except ValueError:
                                     pass
 
-                    # --- DESENHAR OPONENTES ---
                 elif obj['type'] == 'opp':
                     opp = obj['opp']
                     segIdx = int(opp['z'] // self.segmentLength) % totalSegments
@@ -802,7 +735,6 @@ class GameWindow:
                     
                     baseTargetW = destW * 0.28
                     
-                    # LINHA ALTERADA: Puxa a referência de tamanho baseada no modelo DESTE bot
                     baseSpriteW = self.allRawCarSprites[opp['model']]['S'][0].get_width()
                     escalaDistancia = baseTargetW / baseSpriteW
 
@@ -814,7 +746,6 @@ class GameWindow:
                     
                     oppFrame = 0 if (int(opp['z']) % 400) < 200 else 1
                     
-                    # LINHA ALTERADA: Puxa o sprite exato do carro que foi sorteado
                     currentOppSprite = self.allRawCarSprites[opp['model']][oppSteer][oppFrame]
                     
                     finalW = currentOppSprite.get_width() * escalaDistancia
@@ -836,7 +767,6 @@ class GameWindow:
                     except ValueError:
                         pass
 
-            # --- RENDERIZAÇÃO DO JOGADOR ---
             if speed > 0: animTimer = (animTimer + speed) % 1500
             
             animFrame = 0 if animTimer < 750 else 1  
@@ -852,21 +782,13 @@ class GameWindow:
             carRect.bottom = (WINDOW_HEIGHT - 30) - bounceOffset
             self.windowSurface.blit(carImage, carRect)
 
-            # ==========================================
-            # RENDERIZAÇÃO DA FUMAÇA (EFEITOS DO PLAYER)
-            # ==========================================
-            
-            # 1. Atualiza a "memória" de derrapagem (USANDO A GEOMETRIA DA PISTA)
-            # O carro só derrapa se a curva for mais forte que 2.0 (ignora curvas suaves)
             limite_curva_fechada = 3.0 
             
-            # Quebra a tração se: Curva forte + volante no máximo (L ou R) + alta velocidade
             if absCurve > limite_curva_fechada and steerState in ['L', 'R'] and speed > 180:
                 is_drifting = True  
             elif absCurve < 1.0 or speed < 120 or steerState == 'S':
                 is_drifting = False 
                 
-            # 2. Condições para a fumaça aparecer
             tempo_corrida = currentTick - self.countdownStartTick - 3000
             is_patinando_largada = (self.raceState == 'RACING' and 0 <= tempo_corrida < 2000 and cmd_up)
 
@@ -876,7 +798,6 @@ class GameWindow:
             else:
                 self.skidChannel.stop()
             
-            # Esporádica: Só rola se a flag is_drifting estiver True e o volante minimamente virado
             is_fumaca_curva = (is_drifting and steerState in ['L', 'R', 'SL', 'SR'])
             is_fumaca_esporadica = is_fumaca_curva and (random.random() < 0.5)
 
@@ -885,17 +806,14 @@ class GameWindow:
                 if is_fumaca_curva:
                     estado_fumaca = 'L' if steerState in ['L', 'SL'] else 'R'
                 else:
-                    estado_fumaca = 'S' # Fumaça reta da largada
+                    estado_fumaca = 'S'
                 
-                # Animação
                 frame_fumaca = (currentTick // 80) % 3 
                 img_fumaca = self.smokeSprites[estado_fumaca][frame_fumaca]
                 rect_fumaca = img_fumaca.get_rect()
                 
-                # Pulo
                 rect_fumaca.bottom = carRect.bottom
                 
-                # Alinhamento inteligente da sobra da fumaça
                 if estado_fumaca == 'S':
                     rect_fumaca.centerx = carRect.centerx
                 elif estado_fumaca == 'L':
@@ -905,43 +823,30 @@ class GameWindow:
                     
                 self.windowSurface.blit(img_fumaca, rect_fumaca)
 
-            # ==========================================
-            # UI (HUD) - VELOCÍMETRO TOP GEAR (PRECISÃO)
-            # ==========================================
             if draftBonus > 0.5:
                 speedColor, digiDark = self.digiBlue, self.digiBlueDark
             else:
                 speedColor, digiDark = self.digiGreen, self.digiGreenDark
 
-            # --- PARÂMETROS DE AJUSTE MANUAL ---
-            margem_lateral = 25  # Distância padrão para a borda direita
-            base_y = 110         # Alinhamento inferior (mantenha igual para ambos)
+            margem_lateral = 25
+            base_y = 110
             
-            # Dimensões dos retângulos (mexa aqui se o fundo estiver grande ou pequeno demais)
             num_w, num_h = 175, 85 
             unit_w, unit_h = 92, 38 
             espacamento_entre_blocos = 12
 
-            # Cálculo automático da posição para respeitar a borda
             largura_total = num_w + espacamento_entre_blocos + unit_w
             vx_num = WINDOW_WIDTH - largura_total - margem_lateral 
             
-            # 1. BLOCO DOS NÚMEROS
-            # Se quiser o fundo mais largo para a esquerda, aumente o +18
             pygame.draw.rect(self.windowSurface, (0, 0, 0), (vx_num, base_y - num_h, num_w + 18, num_h))
             
-            # AJUSTE DO TEXTO (NÚMEROS): 
-            # -82 controla a altura. Se o número estiver "caído", diminua para -85 ou -90.
             self.draw_hud("888", self.speedFont, digiDark, vx_num, base_y - 82, "left")
             str_speed = f"{int(speed):03d}"
             self.draw_hud(str_speed, self.speedFont, speedColor, vx_num, base_y - 82, "left")
 
-            # 2. BLOCO KM/H
             vx_unit = vx_num + num_w + espacamento_entre_blocos
             pygame.draw.rect(self.windowSurface, (0, 0, 0), (vx_unit, base_y - unit_h, unit_w, unit_h))
             
-            # AJUSTE DO TEXTO (KM/H):
-            # -28 controla a altura. Se o texto estiver voando, aumente para -35 ou -40.
             self.draw_hud("KM/H", self.hudFont, speedColor, vx_unit + 6, base_y - 28, "left")
 
             if self.raceState == 'COUNTDOWN':
@@ -951,37 +856,29 @@ class GameWindow:
             elif self.raceState == 'FINISHED':
                 race_time = self.finishStartTick - self.countdownStartTick - 3000
 
-            # Evita tempo negativo por qualquer imprecisão dos ticks
             race_time = max(0, race_time)
             
             minutos = race_time // 60000
             segundos = (race_time % 60000) // 1000
             centesimos = (race_time % 1000) // 10  
             
-            # Formatando a string no padrão: 00'00''00
             time_str = f"{minutos:02d}'{segundos:02d}''{centesimos:02d}"
             
-            # Definindo âncora Y logo abaixo do velocímetro (o base_y original)
             timer_y = base_y + 15
             
-            # Calcula o centro exato entre o bloco de números e o bloco KM/H
             timer_right_x = vx_unit + unit_w 
             
-            # Desenha a fonte maior (lapFont), branca e alinhada na direita
             self.draw_hud(time_str, self.lapFont, (255, 255, 255), timer_right_x, timer_y, "right")
 
             bottom_y = WINDOW_HEIGHT - 60
             
             if self.dev_mode:
-                # Dev mode: mostra nome da pista
                 self.draw_hud("FREE DRIVE", self.lapFont, (255, 255, 50), 30, bottom_y, "left")
                 self.draw_hud(track_data['name'].upper(), self.hudFont, (180, 180, 180), WINDOW_WIDTH - 30, bottom_y + 5, "right")
             else:
-                # Voltas (Inferior Esquerdo)
                 displayLap = min(currentLap, maxLaps)
                 self.draw_hud(f"LAP {displayLap}/{maxLaps}", self.lapFont, (255, 255, 255), 30, bottom_y, "left")
                 
-                # Posição (Inferior Direito)
                 if self.raceState == 'FINISHED':
                     player_pos = self.final_position
                 else:
@@ -995,7 +892,6 @@ class GameWindow:
                 self.draw_hud(f"{player_pos}{pos_suffix}", self.lapFont, (255, 255, 255), WINDOW_WIDTH - 30, bottom_y, "right")
 
             if not self.dev_mode:
-                # --- GATILHO DE ULTRAPASSAGEM ---
                 if last_player_pos is None:
                     last_player_pos = player_pos
                 elif player_pos != last_player_pos:
@@ -1010,7 +906,6 @@ class GameWindow:
                     
                     center_msg_timer -= 1
 
-                # Mensagens Centrais / Semáforo de Largada
                 elapsed_start = currentTick - self.countdownStartTick
                 
                 if elapsed_start < 3500:
@@ -1044,28 +939,25 @@ class GameWindow:
                 if self.raceState == 'FINISHED':
                     if (currentTick // 500) % 2 == 0:
                         self.draw_hud("FINISH!", self.finishFont, (255, 255, 255), WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50, "center")
-            # ==========================================
-            # DESENHO DOS FADES DE ENTRADA E SAÍDA
-            # ==========================================
-            dt = self.clock.get_time() # Tempo desde o último frame
+
+            dt = self.clock.get_time()
 
             if dt > 50: dt = 50
             
             if fading_in:
-                fade_alpha -= (255 / 1000) * dt # Fade in de 1s
+                fade_alpha -= (255 / 1000) * dict
                 if fade_alpha <= 0:
                     fade_alpha = 0
                     fading_in = False
                     
             elif is_aborting:
-                fade_alpha += (255 / 500) * dt # Fade out rápido de 0.5s ao apertar ESC
+                fade_alpha += (255 / 500) * dt
                 if fade_alpha >= 255:
                     self._muteEngine()
                     return False
                     
             elif self.raceState == 'FINISHED':
                 elapsed_finish = currentTick - self.finishStartTick
-                # A tela de FINISH dura 5000ms. O escurecimento começa aos 4000ms!
                 if elapsed_finish > 4000:
                     fade_alpha += (255 / 1000) * dt
                     if fade_alpha >= 255:
@@ -1074,7 +966,6 @@ class GameWindow:
             if fade_alpha > 0:
                 fade_surface.set_alpha(int(fade_alpha))
                 self.windowSurface.blit(fade_surface, (0, 0))
-            # ==========================================
 
             pygame.display.update()
             self.clock.tick(60)

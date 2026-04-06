@@ -26,7 +26,6 @@ if __name__ == "__main__":
         pygame.mixer.music.play(loops=-1, fade_ms=3000)
         
         menu_inicial.run()
-        
         carro_id = menu_carro.run()
         jogo.set_player_car(carro_id) 
         menu_carro_info.run(carro_id)
@@ -44,7 +43,6 @@ if __name__ == "__main__":
                 pygame.mixer.music.play(loops=-1, fade_ms=1000)
                 musica_atual = nova_musica
             elif not pygame.mixer.music.get_busy():
-                # Reinicia se tiver parado por algum motivo
                 pygame.mixer.music.play(loops=-1, fade_ms=1000)
 
             menu_pista_info.run(track_id)

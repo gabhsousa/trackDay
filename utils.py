@@ -2,11 +2,6 @@ import pygame
 from typing import Tuple
 from config import WINDOW_WIDTH, WINDOW_HEIGHT
 
-def debug(message: str, surface: pygame.Surface, pos: Tuple[int, int]):
-    font = pygame.font.SysFont("Arial", 15)
-    text = font.render(f"{message}", True, "black")
-    surface.blit(text, pos)
-
 def drawQuad(surface: pygame.Surface, color: pygame.Color, x1: float, y1: float, w1: float, x2: float, y2: float, w2: float):
     pygame.draw.polygon(surface, color, [(x1 - w1, y1), (x2 - w2, y2), (x2 + w2, y2), (x1 + w1, y1)])
 

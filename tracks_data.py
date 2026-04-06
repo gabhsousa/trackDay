@@ -1,16 +1,3 @@
-"""
-Definições de dados de todas as pistas do jogo.
-Cada pista é um dicionário com layout, cores e configurações visuais.
-
-Para criar uma nova pista:
-  1. Copie um bloco existente
-  2. Altere id, name, cores, sky e layout
-  3. Layout: lista de tuplas (enter, hold, leave, curve, y)
-     - enter/hold/leave: segmentos de transição e permanência
-     - curve: intensidade da curva (negativo=esquerda, positivo=direita)
-     - y: elevação (negativo=subida)
-"""
-
 TRACKS = [
     {
         "id": "BRA",
@@ -148,7 +135,3 @@ def get_track(track_id: str) -> dict:
         if track['id'] == track_id:
             return track
     raise ValueError(f"Pista '{track_id}' não encontrada!")
-
-
-def get_all_tracks() -> list:
-    return TRACKS

@@ -39,7 +39,6 @@ class Track:
         self.lines: List[Line] = []
         self.segmentLength = segmentLength
         
-        # Cores da pista (podem ser sobrescritas por track_data)
         self.dark_grass = DARK_GRASS
         self.light_grass = LIGHT_GRASS
         self.white_rumble = WHITE_RUMBLE
@@ -63,7 +62,6 @@ class Track:
         total = enter + hold + leave
         currentSegment = 0
         
-        # Guarda o segmento exato onde essa parte da pista começou
         start_n = len(self.lines)
 
         for i in range(enter):
@@ -97,15 +95,12 @@ class Track:
                     self.lines[i].spriteX = sign_x
 
     def buildTrack(self, track_data: dict = None):
-        """Constrói a pista a partir dos dados fornecidos."""
         self.lines = []
         
         if track_data is None:
-            # Fallback: importa e usa a primeira pista
             from tracks_data import get_track
             track_data = get_track('autodromo')
         
-        # Aplica cores da pista
         colors = track_data.get('colors', {})
         if colors:
             self.dark_grass = pygame.Color(*colors['dark_grass'])
@@ -115,12 +110,10 @@ class Track:
             self.white_rumble = pygame.Color(*colors['white_rumble'])
             self.black_rumble = pygame.Color(*colors['black_rumble'])
         
-        # Constrói o layout da pista
         for road in track_data['layout']:
             enter, hold, leave, curve, y = road
             self.addRoad(enter, hold, leave, curve, y)
         
-        # --- LINHA DE LARGADA ---
         start_seg = track_data.get('start_segment', 25)
         if start_seg < len(self.lines):
             self.lines[start_seg].sprite = 'START'
@@ -128,12 +121,10 @@ class Track:
             for i in range(start_seg, min(start_seg + 2, len(self.lines))):
                 self.lines[i].roadColor = pygame.Color(255, 255, 255)
         
-        # --- PLACAS E SPONSORS ---
         sponsors = track_data.get('sponsors', ['PIRELLI'])
         self._placeSponsors(sponsors)
 
     def _placeSponsors(self, sponsors):
-        """Distribui placas de patrocínio e pneus ao longo da pista."""
         sponsor_idx = 0
         
         for i in range(40, len(self.lines)):
