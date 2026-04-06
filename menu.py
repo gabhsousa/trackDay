@@ -150,7 +150,6 @@ class CarSelectMenu:
         return self.carModels[selected]
 
 class LoreMenu:
-    """Classe base para informações de Carro e Pista com caixa de texto e fade"""
     def __init__(self, screen, is_track=False):
         self.screen = screen
         self.clock = pygame.time.Clock()

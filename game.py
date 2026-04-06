@@ -127,7 +127,6 @@ class GameWindow:
         self.set_player_car(self.playerModel)
 
     def set_player_car(self, model):
-        """Define o carro do jogador e redimensiona os sprites e efeitos correspondentes."""
         self.playerModel = model
         carTargetWidth = 300 
         diretorioAtual = os.path.dirname(os.path.abspath(__file__))
@@ -158,7 +157,6 @@ class GameWindow:
             print(f"Aviso: Efeitos de fumaça não encontrados para o modelo {model}!")
 
     def _loadBackground(self, path, scale=2):
-        """Carrega o fundo de uma pista específica."""
         try:
             bgOriginal = pygame.image.load(path).convert_alpha()
             novoW = bgOriginal.get_width() * scale
@@ -178,17 +176,12 @@ class GameWindow:
         self.bgOffsetX = 0.0
 
     def _muteEngine(self):
-        """Silencia todos os canais de áudio do motor."""
         self.engineChannelLow.set_volume(0.0)
         self.engineChannelHigh.set_volume(0.0)
         self.skidChannel.stop()
 
 
     def _gerarPitchMotor(self, baseSound, steps=40, pitchMin=0.8, pitchMax=1.20):
-        """
-        Gera versões do som usando interpolação linear (suavização) 
-        para evitar que o áudio fique crackelando.
-        """
         try:
             audioArray = pygame.sndarray.array(baseSound)
         except Exception as e:
